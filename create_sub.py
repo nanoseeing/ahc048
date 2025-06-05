@@ -36,9 +36,9 @@ def inline_main_cpp(main_cpp_path: str, output_path: str):
             include_match = re.match(r'#include\s+"(.+)"', line)
             if include_match:
                 included_path = (main_path.parent / include_match.group(1)).resolve()
-                out_lines.append(f"// Begin include: {included_path.name}\n")
+                # out_lines.append(f"// Begin include: {included_path.name}\n")
                 out_lines.append(expand_file(included_path))
-                out_lines.append(f"// End include: {included_path.name}\n")
+                # out_lines.append(f"// End include: {included_path.name}\n")
             else:
                 out_lines.append(line)
 

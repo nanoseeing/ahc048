@@ -171,20 +171,21 @@ auto pop(Q &q) -> decltype(q.top(), void(), typename Q::value_type{}) {
 
 class TimeKeeper {
   private:
-    chrono::high_resolution_clock::time_point start_time_;
+    // high_resolution_clock → steady_clock に変更
+    std::chrono::steady_clock::time_point start_time_;
     double time_threshold_;
 
   public:
-    TimeKeeper(const double &time_threshold) : start_time_(chrono::high_resolution_clock::now()), time_threshold_(time_threshold) {
+    TimeKeeper(double time_threshold) : start_time_(std::chrono::steady_clock::now()), time_threshold_(time_threshold) {
     }
 
     double getElapsedTime() const {
-        auto diff = chrono::high_resolution_clock::now() - this->start_time_;
-        return chrono::duration<double, milli>(diff).count();
+        auto diff = std::chrono::steady_clock::now() - start_time_;
+        return std::chrono::duration<double, std::milli>(diff).count();
     }
 
     bool isTimeOver() const {
-        return this->getElapsedTime() >= this->time_threshold_;
+        return getElapsedTime() >= time_threshold_;
     }
 };
 
@@ -400,3 +401,5 @@ vector<vector<int>> choose_nCk(const int N, const int K, int max_comb = 10000) {
 
     return comb_list;
 }
+
+Xorshift64 xor_rng;

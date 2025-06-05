@@ -1,8 +1,82 @@
+// C++
+#include <stdatomic.h>
 
-#pragma once
+#include <any>
+#include <array>
+#include <atomic>
+#include <barrier>
+#include <bit>
+#include <charconv>
+#include <chrono>
+#include <codecvt>
+#include <compare>
+#include <complex>
+#include <concepts>
+#include <condition_variable>
+#include <deque>
+#include <exception>
+#include <expected>
+#include <filesystem>
+#include <format>
+#include <forward_list>
+#include <fstream>
+#include <future>
+#include <generator>
+#include <initializer_list>
+#include <iomanip>
+#include <ios>
+#include <iosfwd>
+#include <iostream>
+#include <istream>
+#include <latch>
+#include <list>
+#include <locale>
+#include <map>
+#include <mdspan>
+#include <memory_resource>
+#include <mutex>
+#include <numbers>
+#include <optional>
+#include <ostream>
+#include <print>
+#include <queue>
+#include <random>
+#include <ranges>
+#include <ratio>
+#include <regex>
+#include <scoped_allocator>
+#include <semaphore>
+#include <set>
+#include <shared_mutex>
+#include <source_location>
+#include <span>
+#include <spanstream>
+#include <sstream>
+#include <stack>
+#include <stacktrace>
+#include <stdexcept>
+#include <stdfloat>
+#include <stop_token>
+#include <streambuf>
+#include <string>
+#include <syncstream>
+#include <system_error>
+#include <thread>
+#include <tuple>
+#include <type_traits>
+#include <typeindex>
+#include <unordered_map>
+#include <unordered_set>
+#include <valarray>
+#include <variant>
+#include <vector>
+#include <version>
 
-#include "common.hpp"
-#include "utils.hpp"
+using namespace ::std;
+using Color = array<double, 3>;
+
+#define ALL(obj)  (obj).begin(), (obj).end()
+#define RALL(obj) (obj).rbegin(), (obj).rend()
 
 // ====================================
 // NNLSを解くためのクラス
@@ -10,6 +84,10 @@
 
 #include <Eigen/Core>
 #include <Eigen/Dense>
+#include <algorithm>
+#include <functional>
+#include <limits>
+#include <numeric>
 
 // 単純体への射影関数
 Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd& v) {
@@ -187,10 +265,6 @@ vector<vector<int>> construct_subsets(int size, int k) {
     return subsets;
 }
 
-vector<vector<double>> Gram;
-vector<vector<double>> pseudo;
-vector<vector<double>> invG;
-
 class ColorMixer {
   public:
     struct Result {
@@ -215,6 +289,7 @@ class ColorMixer {
     static constexpr int MAX_ITER_HEAVY = 1000; // 最大反復回数
 
     vector<Color> paints;
+    vector<SubsetInfo> subsets; // 事前に構築する全組み合わせ情報
     int K;
 
     ColorMixer(const vector<Color>& paints_input) : paints(paints_input) {
@@ -223,20 +298,13 @@ class ColorMixer {
 
     vector<Result> solve_nnls(const Color& t, int comb_size, int find_top_n) {
         auto subsets = construct_subsets(comb_size, this->K);
-        sort(ALL(subsets), [&](auto& a, auto& b) { return xor_rng.next() < 0.5; });
 
-        const int MAX_SUBSETS = 2000;
-        const int MAX_HEAVY_NNLS = 1;
-        if(subsets.size() > MAX_SUBSETS) {
-            subsets.resize(MAX_SUBSETS);
-        }
-
-        // const int TEMP_HEAP_SIZE = 30;
+        const int TEMP_HEAP_SIZE = 30;
 
         priority_queue<Result> heap;
         for(const auto& indices : subsets) {
             Result r = solve_nnls_inv(t, indices);
-            if((int)heap.size() < find_top_n) {
+            if((int)heap.size() < TEMP_HEAP_SIZE) {
                 heap.push(r);
             } else if(r.err < heap.top().err) {
                 heap.pop();
@@ -249,24 +317,32 @@ class ColorMixer {
             auto r = heap.top();
             heap.pop();
             results.push_back(r);
-            Result r2 = solve_nnls_pdm(r.indices, t, true, EPS, MAX_ITER);
-            if(r2.err < r.err) {
-                results.push_back(r2);
-            } else {
-                results.push_back(r);
-            }
+            // if(r.err < 1e-4) {
+            //     results.push_back(r);
+            // } else {
+            //     Result r2 = solve_nnls_pdm(r.indices, t, true, EPS, MAX_ITER);
+            //     if(r2.err < r.err) r = move(r2);
+            //     if(r.err < 1e-4) {
+            //         results.push_back(r);
+            //     } else {
+            //         Result r3 = solve_nnls_pdm(r.indices, t, false, EPS, MAX_ITER_HEAVY);
+            //         if(r3.err < r.err) {
+            //             results.push_back(r3);
+            //         } else {
+            //             results.push_back(r);
+            //         }
+            //     }
+            // }
         }
+
         sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.err < b.err; });
 
-        for(int i : range(min((int)results.size(), MAX_HEAVY_NNLS))) {
-            auto& r = results[i];
-            if(r.err < 1e-4) continue;
-            Result r3 = solve_nnls_pdm(r.indices, t, false, EPS, MAX_ITER_HEAVY);
-            if(r3.err < r.err) {
-                results[i] = r3;
-            }
+        vector<Result> top_results;
+        for(int i = 0; i < min(find_top_n, (int)results.size()); ++i) {
+            top_results.push_back(results[i]);
         }
-        return results;
+
+        return top_results;
     }
 
     Result solve_nnls_pdm(const vector<int>& indices, const Color& t_color, double is_alpha_max_fixed = true, double eps = EPS, int max_iter = MAX_ITER) {
@@ -303,7 +379,9 @@ class ColorMixer {
     Result solve_nnls_inv(const Color& t, vector<int> indices) {
         int n = static_cast<int>(indices.size());
 
-        calc_gram_inv(indices);
+        vector<vector<double>> Gram;
+        vector<vector<double>> pseudo;
+        calc_gram_inv(indices, Gram, pseudo);
 
         double t_norm2 = t[0] * t[0] + t[1] * t[1] + t[2] * t[2];
 
@@ -358,12 +436,12 @@ class ColorMixer {
         return Result{true_err, indices, w_ls};
     }
 
-    void invertMatrix(int size) const {
+    void invertMatrix(const vector<vector<double>>& G, vector<vector<double>>& invG, int size) const {
         // tmp は size × (2*size) の拡大行列 [G | I]
         vector<vector<double>> tmp(size, vector<double>(2 * size, 0.0));
         for(int i = 0; i < size; i++) {
             for(int j = 0; j < size; j++) {
-                tmp[i][j] = Gram[i][j];
+                tmp[i][j] = G[i][j];
             }
             for(int j = 0; j < size; j++) {
                 tmp[i][size + j] = (i == j ? 1.0 : 0.0);
@@ -408,7 +486,7 @@ class ColorMixer {
         }
     }
 
-    void calc_gram_inv(vector<int> const& comb) {
+    void calc_gram_inv(vector<int> const& comb, vector<vector<double>>& Gram, vector<vector<double>>& pseudo) {
         int size = static_cast<int>(comb.size());
 
         Gram.assign(size, vector<double>(size, 0.0));
@@ -421,7 +499,8 @@ class ColorMixer {
         }
 
         // Gram の逆行列 invG を計算
-        invertMatrix(size);
+        vector<vector<double>> invG;
+        invertMatrix(Gram, invG, size);
 
         // 擬似逆行列 = invG × A_S^T (sz×3)
         pseudo.assign(size, vector<double>(3, 0.0));
@@ -436,3 +515,68 @@ class ColorMixer {
         }
     }
 };
+
+struct Input {
+    int N, K, H, T, D;
+    vector<Color> own;
+    vector<Color> target;
+};
+
+/**
+ * ファイル "input.txt" を開いてパースし、Input を返す関数
+ */
+Input parse_input_from_file() {
+    Input input;
+
+    // 1) 読み込むファイル名を指定（必要に応じてハードコードではなく引数に変えることも可）
+    const std::string filename = "0011.txt";
+
+    // 2) ifstream でファイルを開く
+    std::ifstream fin(filename);
+    if(!fin.is_open()) {
+        std::cerr << "エラー: ファイル \"" << filename << "\" を開けませんでした。\n";
+        std::exit(1);
+    }
+
+    // 3) 元の cin からの読み込みを fin に置き換え
+    fin >> input.N >> input.K >> input.H >> input.T >> input.D;
+
+    // own を K 行 × 3 列で読み込む
+    input.own.resize(input.K);
+    for(int i = 0; i < input.K; ++i) {
+        for(int j = 0; j < 3; ++j) {
+            fin >> input.own[i][j];
+        }
+    }
+
+    // target を H 行 × 3 列で読み込む
+    input.target.resize(input.H);
+    for(int i = 0; i < input.H; ++i) {
+        for(int j = 0; j < 3; ++j) {
+            fin >> input.target[i][j];
+        }
+    }
+
+    fin.close();
+    return input;
+}
+void main() {
+    Input input = parse_input_from_file();
+    ColorMixer mixer(input.own);
+
+    const int SEARCH_SIZE = 10;
+
+    for(int h = 0; h < input.H; h++) {
+        Color t = input.target[h];
+        vector<double> errs;
+        for(int k = 0; k < (2, min(5, input.K + 1)); k++) {
+            // auto results = mixer.solve_nnls_nCk(input.K, k, MAX_COMB, t);
+            auto results = mixer.solve_nnls(t, k, SEARCH_SIZE);
+            auto best_ret = results[0];
+            double w_sum = accumulate(ALL(best_ret.weights), 0.0);
+            double e = best_ret.err * 1e4;
+            errs.push_back(e);
+        }
+        cerr << h << " " << errs[0] << endl;
+    }
+}
