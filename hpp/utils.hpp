@@ -366,3 +366,37 @@ void reorder_vector(std::vector<T> &vec, const std::vector<size_t> &indices) {
     }
     vec = std::move(reordered);
 }
+
+void choose_front(int start, int needed, int m, std::vector<int> &sel, std::vector<std::vector<int>> &result_list) {
+    if(needed == 0) {
+        std::vector<int> full = sel;
+        full.push_back(m);
+        result_list.push_back(full);
+        return;
+    }
+
+    for(int i = start; i <= m - needed; ++i) {
+        sel.push_back(i);
+        choose_front(i + 1, needed - 1, m, sel, result_list);
+        sel.pop_back();
+    }
+}
+
+vector<vector<int>> choose_nCk(const int N, const int K, int max_comb = 10000) {
+    std::vector<int> buffer;
+    std::vector<std::vector<int>> tmp;
+    vector<vector<int>> comb_list;
+    for(int m = K - 1; m < N; ++m) {
+        tmp.clear();
+        buffer.clear();
+        choose_front(0, K - 1, m, buffer, tmp);
+        for(auto &comb : tmp) {
+            if((int)comb_list.size() >= max_comb) {
+                return comb_list;
+            }
+            comb_list.push_back(comb);
+        }
+    }
+
+    return comb_list;
+}

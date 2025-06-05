@@ -184,7 +184,9 @@ struct State {
     int turn = 0;
     int add_cnt = 0;
     double error = 0.0;
+    double discard = 0.0;
     int deliver_cnt = 0;
+    int discard_cnt = 0;
 
     State(const Wall &init_wall, const Input &input) {
         this->input = input;
@@ -220,7 +222,7 @@ struct State {
         if(w < 1.0) {
             this->paints[id].color = mix(this->paints[id].vol, this->paints[id].color, w, input.own[action.k]);
             this->paints[id].vol = static_cast<double>(this->paints[id].cap);
-            cerr << boost::format("Warning: Paint volume exceeds capacity, turn: %d)") % this->turn << endl;
+            throw runtime_error(boost::str(boost::format("Error: Paint volume exceeds capacity, turn: %d)") % this->turn));
         } else {
             this->paints[id].color = mix(this->paints[id].vol, this->paints[id].color, 1.0, input.own[action.k]);
             this->paints[id].vol += 1.0;
@@ -244,7 +246,12 @@ struct State {
     }
 
     void apply_discard(const Action &action) {
+        this->discard_cnt++;
         int id = this->ids[action.i][action.j];
+        if(this->paints[id].vol < 1e-6) {
+            throw runtime_error("Error: Not enough paint to discard.");
+        };
+        discard += min(1.0, this->paints[id].vol);
         this->paints[id].vol = max(0.0, this->paints[id].vol - 1.0);
     }
 

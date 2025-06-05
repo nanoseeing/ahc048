@@ -1,7 +1,7 @@
 #include "hpp/common.hpp"
 #include "hpp/game.hpp"
 #include "hpp/io.hpp"
-#include "hpp/nnls_pdm.hpp"
+#include "hpp/nnls.hpp"
 #include "hpp/utils.hpp"
 
 // ============================================================================
@@ -232,6 +232,7 @@ class FractorManager {
         fractors.push_back({make_pair(-1, -1)});
         rates.push_back(0.0);
 
+        // !INFO
         // 分数の適応パターンが多すぎる場合、パターンの列挙だけでTLEする可能性がある。
         // 仕方なくパターン数を減らすが、もっと良い方法があるかもしれない。
 
@@ -327,6 +328,14 @@ void PolicyGreedy(Input &input, State &state, ManageGroupInfo &group_info) {
     }
 
     if(is_add) {
+        if(group_info.get_now_pos(min_k) == 1) {
+            // 仕切りが1しかない場合は、仕切りを追加する
+            const int POS = 2;
+            int now_pos = group_info.get_now_pos(min_k);
+            state.apply(group_info.get_toggle_action(min_k, POS));
+            state.apply(group_info.get_toggle_action(min_k, now_pos));
+            group_info.change_now_pos(min_k, POS);
+        }
         state.apply(group_info.get_add_paint_action(min_k));
     }
 
@@ -353,15 +362,15 @@ class DicisionActionPerResult {
   public:
     FractorManager &fractor_manager;
     ManageGroupInfo &manage_group_info;
-    State &state;
     Input &input;
+    State &state;
 
     DicisionActionPerResult(FractorManager &fractor_manager_, ManageGroupInfo &manage_group_info_, Input &input_, State &state_)
         : fractor_manager(fractor_manager_), manage_group_info(manage_group_info_), input(input_), state(state_) {
     }
 
-    double eval_cost(Input &input, State &state, vector<ImmediateInfo> &immeediate_info) {
-        auto &now_target = state.input.target[state.deliver_cnt];
+    double eval_cost(vector<ImmediateInfo> &immeediate_info) {
+        auto &now_target = this->state.input.target[this->state.deliver_cnt];
 
         double sum_vol = 0.0;
         int add_cnt = 0;
@@ -369,35 +378,36 @@ class DicisionActionPerResult {
         vector<Color> colors;
         for(auto info : immeediate_info) {
             vols.emplace_back(info.vol);
-            colors.emplace_back(input.own[info.k]);
+            colors.emplace_back(this->input.own[info.k]);
             sum_vol += info.vol;
             if(info.is_add) add_cnt++;
         }
 
         Color mixed_color = mix(vols, colors);
         double err_cost = eval_error(mixed_color, now_target) * 1e4;
-        double discard_cost = max(0.0, sum_vol - 1.0) * (double)(input.D);
+        double discard_cost = max(0.0, sum_vol - 1.0) * (double)(this->input.D);
 
         if(state.deliver_cnt <= SWITCH_EVAL_COST_TURN) {
             // 通常は、廃棄=追加コストとみなす
             return err_cost + discard_cost;
         } else {
-            // 最後の方は、追加コストを見る
+            // TODO
+            //  最後の方は、追加コストを見る
 
             // double total_board_vol = 0.0;
-            // for(int k : range(input.K)) {
-            //     auto paint = group_info.get_paint(k, state);
+            // for(int k : range(this->input.K)) {
+            //     auto paint = group_info.get_paint(k, this->state);
             //     total_board_vol += paint.vol;
             // }
-            // double add_cost = (total_board_vol + add_cnt) * (double)(input.D);
-            double add_cost = max(0, state.add_cnt + add_cnt - (state.deliver_cnt + 1)) * (double)(input.D);
+            // double add_cost = (total_board_vol + add_cnt) * (double)(this->input.D);
+            double add_cost = max(0, this->state.add_cnt + add_cnt - (this->state.deliver_cnt + 1)) * (double)(this->input.D);
 
             return err_cost + add_cost;
         }
     }
 
     tuple<int, int> search_target_weight_idx(int k, double target_vol, bool is_add, int max_mul_cnt) {
-        double now_vol = manage_group_info.get_paint(k, state).vol;
+        double now_vol = manage_group_info.get_paint(k, this->state).vol;
         int now_pos = manage_group_info.get_now_pos(k);
         int max_group_size = manage_group_info.get_size(k);
         auto &rates = fractor_manager.get_rates(now_pos, max_group_size, max_mul_cnt);
@@ -461,7 +471,7 @@ class DicisionActionPerResult {
                 sum_vol += info.vol;
             }
             if(sum_vol > 1.0 - 1e-6) {
-                double cost = eval_cost(input, state, comb);
+                double cost = eval_cost(comb);
                 if(cost < best_cost) {
                     best_cost = cost;
                     best_info = comb;
@@ -552,35 +562,32 @@ DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, do
     for(int k : range(input.K)) {
         indices.push_back(k);
     }
-    auto single_result = mixer.solve_nnls_for_indices(indices, target);
-
-    vector<ColorMixer::Result> results = {single_result};
-    // for(const auto &result : results) {
-    //     int comb_size = result.indices.size();
-    //     double pred_turn = comb_size * 4.0 + 1.0; // 1色あたり4ターン + 2.0ターンのバッファ
-    //     if(pred_turn <= obj_turn) {
-    //         results.emplace_back(result);
-    //     }
-    //     if((int)results.size() >= MAX_RESULT) {
-    //         break;
-    //     }
-    // }
 
     double best_cost = 1e9;
     vector<ImmediateInfo> best_info;
 
     DicisionActionPerResult per_result = DicisionActionPerResult(fractor_manager, group_info, input, state);
-    for(auto &result : results) {
-        // ! DEBUG
-        for(int max_frac_cnt : APPLY_FACTOR_LIST) {
-            double pred_turn = result.indices.size() * max_frac_cnt * 4.0 + 1.0;
-            if(pred_turn > obj_turn) {
-                continue; // 目標ターン数を超える場合はスキップ
-            }
-            auto [now_info, now_cost] = per_result.eval_one_result(result, max_frac_cnt);
-            if(now_cost < best_cost) {
-                best_cost = now_cost;
-                best_info = now_info;
+
+    vector<int> comb_sizes = {2, 3, 4};
+    const int SEARCH_NUM = 10;
+    for(int comb_size : comb_sizes) {
+        double pred_turn = comb_size * 4.0 + 1.0;
+        if(pred_turn > obj_turn) {
+            continue; // 目標ターン数を超える場合はスキップ
+        }
+
+        auto results = mixer.solve_nnls(target, comb_size, SEARCH_NUM);
+        for(auto &result : results) {
+            for(int max_frac_cnt : APPLY_FACTOR_LIST) {
+                pred_turn = comb_size * max_frac_cnt * 4.0 + 1.0;
+                if(pred_turn > obj_turn) {
+                    continue; // 目標ターン数を超える場合はスキップ
+                }
+                auto [now_info, now_cost] = per_result.eval_one_result(result, max_frac_cnt);
+                if(now_cost < best_cost) {
+                    best_cost = now_cost;
+                    best_info = now_info;
+                }
             }
         }
     }
@@ -599,8 +606,8 @@ void discard_mix_well(State &state, Input &input) {
 
 void print_info(State &state) {
     auto [deliver_cost, err_cost, total_cost] = state.get_score();
-    cerr << boost::format("H: %d, Turn: %d, Add %d, Score: %d (add: %d, err: %d)") % state.deliver_cnt % state.turn % state.add_cnt % total_cost %
-                deliver_cost % err_cost
+    cerr << boost::format("H: %4d | Turn: %5d/%5d | Add: %4d | Discard: %4d (%5d loss) | Score: %5d (add: %5d, err: %5d)") % state.deliver_cnt % state.turn %
+                state.input.T % state.add_cnt % state.discard_cnt % int(state.discard * 1e4) % total_cost % deliver_cost % err_cost
          << endl;
 }
 
@@ -638,10 +645,8 @@ void solve() {
             if(obj_turn >= SWITH_POLICY_OBJ_TURN) {
                 auto action_result = dicision_action(input, state, mixer, obj_turn, manage_group_info, fractor_manager);
 
-                // tmp
                 act_cnt[action_result.change_color_num] += action_result.act_cnt;
                 color_cnt[action_result.change_color_num]++;
-                //
 
                 for(const auto &act : action_result.pre_actions) {
                     state.apply(act);
@@ -682,7 +687,9 @@ void solve() {
         double avg = (double)total / (double)call;
         cerr << boost::format("color num: %d, call: %d, total: %d, avg: %f") % color_num % call % total % avg << endl;
     }
-    cerr << boost::format("score: %d, elapsed: %f, turn: %d/%d]") % get<2>(state.get_score()) % time_keeper.getElapsedTime() % state.turn % input.T << endl;
+    cerr << boost::format("score: %d, elapsed: %f, turn: %d/%d") % get<2>(state.get_score()) % time_keeper.getElapsedTime() % state.turn % input.T << endl;
+
+    // output
     Output output = Output{init_wall, state.actions};
     print_output(output);
 }

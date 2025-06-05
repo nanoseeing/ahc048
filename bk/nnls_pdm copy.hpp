@@ -198,33 +198,21 @@ class ColorMixer {
     }
 
     vector<Result> solve_nnls_nCk(int n, int k, int max_comb, const Color& t_color) {
-        vector<int> indices;
-        for(int i = 0; i < this->K; ++i) {
-            indices.push_back(i);
-        }
-
-        Result all_indices_result = solve_nnls_for_indices(indices, t_color, true, EPS, MAX_ITER);
-        if(all_indices_result.squared_error >= 1.0e-4) {
-            Result ret2 = solve_nnls_for_indices(indices, t_color, false, EPS, MAX_ITER_HEAVY);
-            if(ret2.squared_error < all_indices_result.squared_error) {
-                all_indices_result = ret2;
-            }
-        }
-
-        sort(indices.begin(), indices.end(), [&](int a, int b) { return all_indices_result.weights[a] > all_indices_result.weights[b]; });
-
+        // 10^5程度に抑えたい。
+        const int HEAVY_THRESHOLD = 100;
         vector<vector<int>> comb_indices = choose_nCk(n, k, max_comb);
-
+        const int comb_size = static_cast<int>(comb_indices.size());
         vector<Result> results;
         for(const auto& comb : comb_indices) {
-            vector<int> target_indices;
-            for(int idx : comb) {
-                target_indices.push_back(indices[idx]);
+            Result ret = solve_nnls_for_indices(comb, t_color, true, EPS, MAX_ITER);
+            if(comb_size <= HEAVY_THRESHOLD && ret.squared_error >= 1.0e-4) {
+                Result ret2 = solve_nnls_for_indices(comb, t_color, false, EPS, MAX_ITER_HEAVY);
+                if(ret2.squared_error < ret.squared_error) {
+                    ret = ret2;
+                }
             }
-            auto res = solve_nnls_for_indices(target_indices, t_color);
-            results.push_back(res);
+            results.push_back(ret);
         }
-
         sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.squared_error < b.squared_error; });
         return results;
     }

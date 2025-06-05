@@ -1,36 +1,32 @@
+#include "hpp/comb.hpp"
 #include "hpp/common.hpp"
-// #include "hpp/eigen_comb.hpp"
-// #include "hpp/comb.hpp"
-// #include "hpp/colormixer.hpp"
 #include "hpp/game.hpp"
 #include "hpp/io.hpp"
-#include "hpp/nnls_pdm.hpp"
+// #include "hpp/nnls_pdm.hpp"
 #include "hpp/utils.hpp"
 
 void solve() {
     Input input = parse_input();
     ColorMixer mixer(input.own);
 
-    vector<int> indices;
-    for(int k : range(input.K)) {
-        indices.push_back(k);
-    }
+    const int SEARCH_SIZE = 10;
 
+    TimeKeeper timer(100.0);
     for(int h : range(input.H)) {
         Color t = input.target[h];
-        auto result = mixer.solve_nnls_for_indices(indices, t, 1e-12, 10000);
-        double w_sum = accumulate(ALL(result.weights), 0.0);
-        cpp_dump(w_sum, result.squared_error * 1e4, result.weights, result.indices);
+        vector<double> errs;
+        for(int k : range(2, min(5, input.K + 1))) {
+            auto results = mixer.find_topN(t, SEARCH_SIZE);
+            // auto results = mixer.solve_nnls(t, k, SEARCH_SIZE);
+            auto best_ret = results[0];
+            double w_sum = accumulate(ALL(best_ret.weights), 0.0);
+            double e = best_ret.squared_error * 1e4;
+            errs.push_back(e);
+        }
+        // cpp_dump(h, errs);
     }
 
-    // for(int h : range(input.H)) {
-    //     Color t = input.target[h];
-    //     auto results = mixer.find_topN(t, 10);
-    //     auto first_result = results[0];
-    //     cpp_dump(first_result.squared_error * 1e4); //, first_result.weights, first_result.indices);
-    //     // auto [w, err, c_hat] = mixer.solve_nnls_for_indices(indices, t);
-    //     // cpp_dump(err * 1e4, w);
-    // }
+    cpp_dump(timer.getElapsedTime());
 }
 
 int main() {

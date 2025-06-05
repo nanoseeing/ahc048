@@ -84,9 +84,9 @@ double estimateMaxEigenvalue(const Eigen::MatrixXd& A, int powerIter = 20) {
 // -----------------------------------------------------------------------------
 pair<bool, int> nnls_projected_gradient_bb_clipped(const Eigen::MatrixXd& A, const Eigen::VectorXd& b,
                                                    Eigen::VectorXd& x, // 初期 guess を与え、解がここに返る (size n)
-                                                   double tol = 1e-7,  // KKT 条件の残差閾値
-                                                   int max_iter = 1e3, // 最大イテレーション数
-                                                   bool is_alpha_max_fixed = true) {
+                                                   double tol = 1e-8,  // KKT 条件の残差閾値
+                                                   int max_iter = 5000 // 最大イテレーション数
+) {
     const int m = A.rows();
     const int n = A.cols();
     if(b.size() != m || x.size() != n) {
@@ -105,13 +105,8 @@ pair<bool, int> nnls_projected_gradient_bb_clipped(const Eigen::MatrixXd& A, con
     // 3) α_max, α_min の設定（上限・下限をクリップする）
     //    上限: 0.8 / λ_max  (「1/λ_max の約80%」)
     //    下限: 1e-6 / λ_max
-    double alpha_max;
-    if(is_alpha_max_fixed) {
-        alpha_max = 1e8; // alphaがでかいと発散することがあるので注意
-    } else {
-        alpha_max = 0.99 / lambda_max;
-    }
-    const double alpha_min = 1e-12 / lambda_max;
+    const double alpha_max = 0.95 / lambda_max;
+    const double alpha_min = 1e-6 / lambda_max;
 
     // 4) 初期化: x >= 0 且つ sum(x)=1 にする
     //    └  もし呼び出し側が x ≥ 0, sum=1 を用意していなければ、
@@ -181,9 +176,8 @@ class ColorMixer {
     vector<Color> paints;
     int K;
 
-    static constexpr double EPS = 1e-7;         // 許容誤差 (sum_w ≈ 1.0 ± epsに収束)
-    static constexpr int MAX_ITER = 100;        // 簡易評価
-    static constexpr int MAX_ITER_HEAVY = 1000; // 最大反復回数
+    static constexpr double EPS = 1e-7;   // 許容誤差 (sum_w ≈ 1.0 ± epsに収束)
+    static constexpr int MAX_ITER = 1000; // 最大反復回数
 
     struct Result {
         double squared_error;
@@ -197,58 +191,23 @@ class ColorMixer {
         this->K = static_cast<int>(paints.size());
     }
 
-    vector<Result> solve_nnls_nCk(int n, int k, int max_comb, const Color& t_color) {
-        vector<int> indices;
-        for(int i = 0; i < this->K; ++i) {
-            indices.push_back(i);
-        }
-
-        Result all_indices_result = solve_nnls_for_indices(indices, t_color, true, EPS, MAX_ITER);
-        if(all_indices_result.squared_error >= 1.0e-4) {
-            Result ret2 = solve_nnls_for_indices(indices, t_color, false, EPS, MAX_ITER_HEAVY);
-            if(ret2.squared_error < all_indices_result.squared_error) {
-                all_indices_result = ret2;
-            }
-        }
-
-        sort(indices.begin(), indices.end(), [&](int a, int b) { return all_indices_result.weights[a] > all_indices_result.weights[b]; });
-
-        vector<vector<int>> comb_indices = choose_nCk(n, k, max_comb);
-
-        vector<Result> results;
-        for(const auto& comb : comb_indices) {
-            vector<int> target_indices;
-            for(int idx : comb) {
-                target_indices.push_back(indices[idx]);
-            }
-            auto res = solve_nnls_for_indices(target_indices, t_color);
-            results.push_back(res);
-        }
-
-        sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.squared_error < b.squared_error; });
-        return results;
-    }
-
-    Result solve_nnls_for_indices(const vector<int>& indices, const Color& t_color, double is_alpha_max_fixed = true, double eps = EPS,
-                                  int max_iter = MAX_ITER) {
-        int n = static_cast<int>(indices.size());
+    Result solve_nnls_for_indices(const vector<int>& indices, const Color& t_color, double eps = EPS, int max_iter = MAX_ITER) {
         Eigen::Vector3d t(t_color[0], t_color[1], t_color[2]);
-        Eigen::VectorXd x0 = Eigen::VectorXd::Constant(n, 1.0 / double(n));
+        Eigen::VectorXd x0 = Eigen::VectorXd::Zero(K);
         Eigen::MatrixXd A;
 
+        int n = static_cast<int>(indices.size());
         A.resize(3, n);
-        for(int j = 0; j < n; ++j) {
-            int paint_idx = indices[j];
-            const auto& col = paints[paint_idx];
+        for(int i : indices) {
+            auto& col = paints[i];
             Eigen::Vector3d c(col[0], col[1], col[2]);
-            A.col(j) = c;
+            A.col(i) = c;
         }
 
-        Eigen::VectorXd w;
+        auto [ok, iter_cnt] = nnls_projected_gradient_bb_clipped(A, t, x0, eps, max_iter);
 
-        auto [ok, iter_cnt] = nnls_projected_gradient_bb_clipped(A, t, x0, eps, max_iter, is_alpha_max_fixed);
         auto err = (A * x0 - t).norm();
-        w = x0.transpose();
+        auto w = x0.transpose();
 
         double sum_w = w.sum();
         assert(abs(sum_w - 1.0) < 1e-6); // 合計が 1 に正規化されていることを確認
