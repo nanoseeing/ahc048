@@ -19,8 +19,7 @@ const int MAX_RESULT = 20;
 const int BUFFER_TURN = 30; // 30ターンは余裕を持たせる
 
 const double SWITH_POLICY_OBJ_TURN = 9.0;
-const int MAX_APPLY_FRACTOR = 1;           // 分数適応回数の最大値
-const vector<int> APPLY_FACTOR_LIST = {0}; // {0, 1}
+const vector<int> APPLY_FACTOR_LIST = {1, 2};
 
 // ============================================================================
 // Main
@@ -70,7 +69,6 @@ class ManageGroupInfo {
             std::sort(num_list.begin(), num_list.end());
         }
 
-        // acc_num_list: 累積和
         std::vector<int> acc_num_list(k, 0);
         for(int i = 0; i < k - 1; ++i) {
             acc_num_list[i + 1] = num_list[i] + acc_num_list[i];
@@ -157,7 +155,7 @@ class ManageGroupInfo {
             wall_h[input_data.N - 2][x] = true;
         }
 
-        // ルート間の仕切りを外す
+        // ルート内の仕切りを外す
         for(int k : range(input_data.K)) {
             const int root_size = (int)infos[k].roots.size();
             for(int i : range(1, root_size)) {
@@ -190,6 +188,127 @@ class ManageGroupInfo {
         }
 
         return Wall(wall_h, wall_v);
+    }
+};
+
+class FractorManager {
+    using KEY = tuple<int, int, int>; // (init_pos, max_denom, apply_frac_cnt)
+
+  private:
+    unordered_map<KEY, vector<Fractors>> fractor_map;
+    unordered_map<KEY, vector<double>> rates_map;
+
+  public:
+    FractorManager(vector<int> &max_denominators) {
+        for(auto &max_denom : max_denominators) {
+            this->construct(max_denom, 1);
+            this->construct(max_denom, 2);
+        }
+    }
+
+    double calc_rate(const Fractors &fractors) const {
+        double rate = 1.0;
+        for(auto &fractor : fractors) {
+            if(fractor.first == -1) {
+                rate = 0.0;
+            } else {
+                rate *= (double)(fractor.first) / (double)(fractor.second);
+            }
+        }
+        return rate;
+    }
+
+    void construct(int max_denom, int apply_frac_cnt) {
+        vector<Fractors> fractors;
+        vector<double> rates;
+
+        // 全開放
+        fractors.push_back({make_pair(1, 1)});
+        rates.push_back(1.0);
+
+        // 何もしない
+        fractors.push_back({make_pair(-1, -1)});
+        rates.push_back(0.0);
+
+        // 分数の適応パターンが多すぎる場合、パターンの列挙だけでTLEする可能性がある。
+        // 仕方なくパターン数を減らすが、もっと良い方法があるかもしれない。
+        long long MAX_SIMULATE_CNT = 1e7;
+
+        int MAX_STEP = 1;
+        long long simulate_cnt = pow(max_denom, 5);
+        if(simulate_cnt > MAX_SIMULATE_CNT) {
+            double div = (double)simulate_cnt / (double)MAX_SIMULATE_CNT;
+            MAX_STEP = max(1, int(round(pow(div, 1.0 / 5.0))));
+        }
+        long long pred_simulate_cnt = pow(max_denom / MAX_STEP, 5);
+        cpp_dump(MAX_STEP, pred_simulate_cnt);
+
+        unordered_set<Fractor> fractor_set;
+        for(int init_pos : range(max_denom, 0, -1)) {
+            for(int fractor_cnt : range(apply_frac_cnt)) {
+                // 分数1回適応
+                if(fractor_cnt == 0) {
+                    for(int denominator : range(init_pos, max_denom + 1)) {
+                        for(int numerator : range(1, denominator)) {
+                            Fractor fractor = make_pair(numerator, denominator);
+                            Fractor reduced_fractor = reduce_fraction(fractor);
+                            if(fractor_set.contains(reduced_fractor)) continue;
+                            fractor_set.insert(reduced_fractor);
+                            fractors.push_back({fractor});
+                            rates.emplace_back(calc_rate(fractors.back()));
+                        }
+                    }
+                } else if(fractor_cnt == 1) {
+                    // 分数2回適応
+                    for(int d1 : range(init_pos + 1, max_denom + 1, MAX_STEP)) {
+                        for(int n1 : range(1, d1, MAX_STEP)) {
+                            Fractor f1 = make_pair(n1, d1);
+                            // 次の分母の最小値 = 下側のブロック数 = 前の分子
+                            // 次の分母の最大値 += 最大ブロック数 - 前の分母
+                            for(int d2 : range(max(2, n1), n1 + (max_denom - d1) + 1, MAX_STEP)) {
+                                for(int n2 : range(1, d2, MAX_STEP)) {
+                                    Fractor f2 = make_pair(n2, d2);
+                                    Fractor fractor = mul_fracs({f1, f2});
+                                    if(fractor_set.contains(fractor)) continue;
+                                    fractor_set.insert(fractor);
+                                    fractors.push_back({f1, f2});
+                                    rates.emplace_back(calc_rate(fractors.back()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2分探索のためソートしておく必要がある
+            auto inds = make_sorted_indices(rates);
+            reorder_vector(fractors, inds);
+            reorder_vector(rates, inds);
+
+            KEY key = make_tuple(init_pos, max_denom, apply_frac_cnt);
+            fractor_map[key] = fractors;
+            rates_map[key] = rates;
+        }
+    }
+
+    const vector<Fractors> &get_fractors(int pos, int max_denom, int apply_frac_cnt) const {
+        cpp_dump(pos, max_denom, apply_frac_cnt);
+        KEY key = make_tuple(pos, max_denom, apply_frac_cnt);
+        return fractor_map.at(key);
+    }
+
+    const vector<double> &get_rates(int pos, int max_denom, int apply_frac_cnt) const {
+        cpp_dump(pos, max_denom, apply_frac_cnt);
+        KEY key = make_tuple(pos, max_denom, apply_frac_cnt);
+        return rates_map.at(key);
+    }
+
+    pair<double, Fractors> get(int pos, int max_denom, int apply_frac_cnt, int i) const {
+        cpp_dump(pos, max_denom, apply_frac_cnt);
+        KEY key = make_tuple(pos, max_denom, apply_frac_cnt);
+        auto &frac = fractor_map.at(key)[i];
+        auto &rate = rates_map.at(key)[i];
+        return {rate, frac};
     }
 };
 
@@ -235,132 +354,17 @@ struct DicisionAction {
 };
 
 class DicisionActionPerResult {
-  private:
-    struct RateItem {
-        int k;
-        double init_vol;
-        // fractorの適用回数に応じて
-        vector<vector<Fractors>> merge_fractors;
-        vector<vector<double>> merge_rates;
-        vector<vector<double>> merge_vols;
-        vector<vector<bool>> merge_is_add;
-    };
-
   public:
-    vector<RateItem> rate_items;
+    FractorManager &fractor_manager;
+    ManageGroupInfo &manage_group_info;
+    State &state;
+    Input &input;
 
-    DicisionActionPerResult(State &state, Input &input, ManageGroupInfo &group_info) {
-        this->construct(state, input, group_info);
+    DicisionActionPerResult(FractorManager &fractor_manager_, ManageGroupInfo &manage_group_info_, Input &input_, State &state_)
+        : fractor_manager(fractor_manager_), manage_group_info(manage_group_info_), input(input_), state(state_) {
     }
 
-    void construct(State &state, Input &input, ManageGroupInfo &group_info) {
-        this->rate_items.resize(input.K);
-
-        for(int k : range(input.K)) {
-            auto paint = group_info.get_paint(k, state);
-            auto now_partition_pos = group_info.get_now_pos(k);
-            auto max_rate = group_info.get_size(k);
-
-            vector<Fractors> fractors;
-            fractors.push_back({make_pair(1, 1)});   // 全開放
-            fractors.push_back({make_pair(-1, -1)}); // 何もしない
-
-            set<Fractor> fractor_set;
-            for(int fractor_cnt : range(MAX_APPLY_FRACTOR)) {
-                // 分数1回適応
-                if(fractor_cnt == 0) {
-                    for(int denominator : range(now_partition_pos, max_rate + 1)) {
-                        for(int numerator : range(1, denominator)) {
-                            Fractor fractor = make_pair(numerator, denominator);
-                            Fractor reduced_fractor = reduce_fraction(fractor);
-                            if(fractor_set.contains(reduced_fractor)) continue;
-                            fractor_set.insert(reduced_fractor);
-                            fractors.push_back({fractor});
-                        }
-                    }
-                } else if(fractor_cnt == 1) {
-                    // 分数2回適応
-                    set<Fractor> fractor_set;
-                    for(int d1 : range(now_partition_pos + 1, max_rate + 1)) {
-                        for(int n1 : range(1, d1)) {
-                            Fractor f1 = make_pair(n1, d1);
-                            // 次の分母の最小値 = 下側のブロック数 = 前の分子
-                            // 次の分母の最大値 += 最大ブロック数 - 前の分母
-                            for(int d2 : range(max(2, n1), n1 + (max_rate - d1) + 1)) {
-                                for(int n2 : range(1, d2)) {
-                                    Fractor f2 = make_pair(n2, d2);
-                                    Fractor fractor = mul_fracs({f1, f2});
-                                    if(fractor_set.contains(fractor)) continue;
-                                    fractor_set.insert(fractor);
-                                    fractors.push_back({f1, f2});
-                                }
-                            }
-                        }
-                    }
-                }
-
-                this->rate_items[k].k = k;
-                this->rate_items[k].init_vol = paint.vol;
-
-                // fractorからrateなどを計算
-                vector<double> rates;
-                vector<double> vols;
-                vector<double> vols_add;
-                for(auto &fractor_vec : fractors) {
-                    double rate = 1.0;
-                    for(auto &fractor : fractor_vec) {
-                        if(fractor.first == -1) {
-                            rate = 0.0;
-                        } else {
-                            rate *= (double)(fractor.first) / (double)(fractor.second);
-                        }
-                    }
-                    rates.emplace_back(rate);
-                    vols.emplace_back(paint.vol * rate);
-                    vols_add.emplace_back((paint.vol + 1.0) * rate);
-                }
-
-                // ソートしておく
-                auto inds = make_sorted_indices(rates);
-                reorder_vector(fractors, inds);
-                reorder_vector(rates, inds);
-                reorder_vector(vols, inds);
-                reorder_vector(vols_add, inds);
-
-                auto false_vec = vector<bool>(rates.size(), false);
-                auto true_vec = vector<bool>(rates.size(), true);
-                if(paint.vol < 1.0) {
-                    // 1.0g追加可能ならマージ
-                    auto merge_fractors = fractors;
-                    auto merge_rates = rates;
-                    auto merge_vols = vols;
-                    auto merge_is_add = false_vec;
-                    merge_fractors.insert(merge_fractors.begin(), ALL(fractors));
-                    merge_rates.insert(merge_rates.begin(), ALL(rates));
-                    merge_vols.insert(merge_vols.begin(), ALL(vols_add));
-                    merge_is_add.insert(merge_is_add.begin(), ALL(true_vec));
-
-                    auto merge_inds = make_sorted_indices(merge_vols);
-                    reorder_vector(merge_fractors, merge_inds);
-                    reorder_vector(merge_rates, merge_inds);
-                    reorder_vector(merge_vols, merge_inds);
-                    reorder_vector(merge_is_add, merge_inds);
-
-                    this->rate_items[k].merge_fractors.emplace_back(merge_fractors);
-                    this->rate_items[k].merge_rates.emplace_back(merge_rates);
-                    this->rate_items[k].merge_vols.emplace_back(merge_vols);
-                    this->rate_items[k].merge_is_add.emplace_back(merge_is_add);
-                } else {
-                    this->rate_items[k].merge_fractors.emplace_back(fractors);
-                    this->rate_items[k].merge_rates.emplace_back(rates);
-                    this->rate_items[k].merge_vols.emplace_back(vols);
-                    this->rate_items[k].merge_is_add.emplace_back(false_vec);
-                }
-            }
-        }
-    }
-
-    double eval_cost(Input &input, State &state, vector<ImmediateInfo> &immeediate_info, ManageGroupInfo &group_info) {
+    double eval_cost(Input &input, State &state, vector<ImmediateInfo> &immeediate_info) {
         auto &now_target = state.input.target[state.deliver_cnt];
 
         double sum_vol = 0.0;
@@ -396,54 +400,63 @@ class DicisionActionPerResult {
         }
     }
 
-    int search_target_weight_idx(int k, double weight, int target_mul_cnt) {
-        auto &rate_item = this->rate_items[k];
-        int rate_item_size = (int)rate_item.merge_vols[target_mul_cnt].size();
-        int it_ind = -1;
-        auto it = upper_bound(ALL(rate_item.merge_vols[target_mul_cnt]), weight);
-        it_ind = distance(rate_item.merge_vols[target_mul_cnt].begin(), it);
-        if(it_ind >= rate_item_size) {
-            it_ind = rate_item_size - 1;
+    tuple<int, int> search_target_weight_idx(int k, double target_vol, bool is_add, int max_mul_cnt) {
+        double now_vol = manage_group_info.get_paint(k, state).vol;
+        int now_pos = manage_group_info.get_now_pos(k);
+        int max_group_size = manage_group_info.get_size(k);
+        auto &rates = fractor_manager.get_rates(now_pos, max_group_size, max_mul_cnt);
+
+        // ---------------------------------------
+        // now_vol * rate = target_vol
+        // rate = target_vol / now_vol
+        // rate = target_vol / (now_vol + 1.0)
+        // ---------------------------------------
+        double search_rate;
+        if(is_add) {
+            search_rate = target_vol / (1.0 + now_vol);
+        } else {
+            search_rate = target_vol / now_vol;
         }
-        return it_ind;
+        auto it = upper_bound(ALL(rates), search_rate);
+        int it_ind = distance(rates.begin(), it);
+        int rates_size = (int)rates.size();
+        if(it_ind >= rates_size) {
+            it_ind = rates_size - 1;
+        }
+        return {it_ind, rates_size};
     }
 
-    tuple<vector<ImmediateInfo>, double> eval_one_result(ColorMixer::Result &result, State &state, Input &input, int target_mul_cnt,
-                                                         ManageGroupInfo &manage_group_info) {
+    tuple<vector<ImmediateInfo>, double> eval_one_result(ColorMixer::Result &constrait, int max_frac_cnt) {
         double best_cost = 1e9;
         vector<ImmediateInfo> best_info;
+        int comb_size = constrait.indices.size();
 
-        int comb_size = result.indices.size();
-
-        int first_k = result.indices[0];
-        double first_target_weight = result.weights[0];
-        int first_arr_size = this->rate_items[first_k].merge_vols[target_mul_cnt].size();
-        int first_it_ind = search_target_weight_idx(first_k, first_target_weight, target_mul_cnt);
-        if(first_it_ind != 0) {
-            first_it_ind--;
-        }
-
+        // cpp_dump(constrait.indices);
+        // cpp_dump(constrait.weights);
         // weightsの係数を守ること優先
         vector<vector<ImmediateInfo>> infos;
         for(int comb_ind : range(comb_size)) {
-            auto k = result.indices[comb_ind];
-            auto target_weight = result.weights[comb_ind];
-            auto &rate_item = rate_items[k];
-            double targe_vol = target_weight;
-            auto it_ind = search_target_weight_idx(k, targe_vol, target_mul_cnt);
+            auto k = constrait.indices[comb_ind];
+            auto target_vol = constrait.weights[comb_ind];
+            double now_vol = manage_group_info.get_paint(k, state).vol;
+            bool is_add = (target_vol > now_vol) ? true : false;
+            auto [it_ind, max_ind] = search_target_weight_idx(k, target_vol, is_add, max_frac_cnt);
             vector<ImmediateInfo> immediate_infos;
 
-            int left, right;
-            left = -1, right = 2; // 初期値
-            for(int j : range(left, right)) {
-                if(it_ind + j < 0 || it_ind + j >= (int)rate_item.merge_vols[target_mul_cnt].size()) continue;
+            const int SEARCH_LEFT = -1;
+            const int SEARCH_RIGHT = 1;
+            for(int j : range(SEARCH_LEFT, SEARCH_RIGHT)) {
+                if(it_ind + j < 0 || it_ind + j >= max_ind) continue;
                 int new_ind = it_ind + j;
-                auto &vol = rate_item.merge_vols[target_mul_cnt][new_ind];
-                auto &rate = rate_item.merge_rates[target_mul_cnt][new_ind];
-                auto &fractors = rate_item.merge_fractors[target_mul_cnt][new_ind];
-                bool is_add = rate_item.merge_is_add[target_mul_cnt][new_ind];
+                auto [rate, fractors] = fractor_manager.get(manage_group_info.get_now_pos(k), manage_group_info.get_size(k), max_frac_cnt, new_ind);
+                double vol;
+                if(is_add) {
+                    vol = (now_vol + 1.0) * rate;
+                } else {
+                    vol = now_vol * rate;
+                }
                 ImmediateInfo info = {.k = k, .is_add = is_add, .rate = rate, .vol = vol, .fractors = fractors};
-                // cpp_dump(boost::format("k: %d, vol: %.6f, rate: %.6f, is_add: %d, target_weight: %.6f") % k % vol % rate % is_add % target_weight);
+                // cpp_dump(boost::format("k: %d, vol: %.6f, rate: %.6f, is_add: %d, target_weight: %.6f") % k % vol % rate % is_add % target_vol);
                 immediate_infos.emplace_back(info);
             }
             infos.emplace_back(immediate_infos);
@@ -454,8 +467,9 @@ class DicisionActionPerResult {
             for(const auto &info : comb) {
                 sum_vol += info.vol;
             }
+            // cpp_dump(sum_vol);
             if(sum_vol > 1.0 - 1e-6) {
-                double cost = eval_cost(input, state, comb, manage_group_info);
+                double cost = eval_cost(input, state, comb);
                 if(cost < best_cost) {
                     best_cost = cost;
                     best_info = comb;
@@ -467,8 +481,7 @@ class DicisionActionPerResult {
     }
 };
 
-DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, ManageGroupInfo &manage_group_info, State &state,
-                                            ColorMixer::Result &mix_result) {
+DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, ManageGroupInfo &manage_group_info) {
     DicisionAction action_result;
     action_result.change_color_num = (int)best_info.size();
 
@@ -544,7 +557,7 @@ DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, Ma
     return action_result;
 }
 
-DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, double obj_turn, ManageGroupInfo &group_info) {
+DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, double obj_turn, ManageGroupInfo &group_info, FractorManager &fractor_manager) {
     Color target = input.target[state.deliver_cnt];
     vector<int> indices;
     for(int k : range(input.K)) {
@@ -568,15 +581,15 @@ DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, do
     double best_cost = 1e9;
     vector<ImmediateInfo> best_info;
 
-    DicisionActionPerResult per_result = DicisionActionPerResult(state, input, group_info);
+    DicisionActionPerResult per_result = DicisionActionPerResult(fractor_manager, group_info, input, state);
     for(auto &result : results) {
         // ! DEBUG
-        for(int target_mul_cnt : APPLY_FACTOR_LIST) {
-            double pred_turn = result.indices.size() * (target_mul_cnt + 1) * 4.0 + 1.0;
+        for(int max_frac_cnt : APPLY_FACTOR_LIST) {
+            double pred_turn = result.indices.size() * max_frac_cnt * 4.0 + 1.0;
             if(pred_turn > obj_turn) {
                 continue; // 目標ターン数を超える場合はスキップ
             }
-            auto [now_info, now_cost] = per_result.eval_one_result(result, state, input, target_mul_cnt, group_info);
+            auto [now_info, now_cost] = per_result.eval_one_result(result, max_frac_cnt);
             if(now_cost < best_cost) {
                 best_cost = now_cost;
                 best_info = now_info;
@@ -586,7 +599,7 @@ DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, do
 
     assert((int)best_info.size() != 0);
 
-    auto action_result = construct_from_immediateinfo(best_info, group_info, state, single_result);
+    auto action_result = construct_from_immediateinfo(best_info, group_info);
     return action_result;
 }
 
@@ -605,9 +618,17 @@ void print_info(State &state) {
 
 void solve() {
     TimeKeeper time_keeper(MAX_TIME);
-    Input input = parse_input();
 
+    Input input = parse_input();
     ManageGroupInfo manage_group_info(input.N, input.K, input.K, INIT_PARTITION_POS);
+
+    set<int> unique_denoms;
+    for(int k : range(input.K)) {
+        unique_denoms.insert(manage_group_info.get_size(k));
+    }
+    vector<int> denoms(ALL(unique_denoms));
+
+    FractorManager fractor_manager(denoms);
     auto init_wall = manage_group_info.struct_init_wall(input);
     State state(init_wall, input);
     ColorMixer mixer(input.own);
@@ -627,7 +648,7 @@ void solve() {
             double obj_turn = (double)remain_turn / (double)(input.H - state.deliver_cnt);
 
             if(obj_turn >= SWITH_POLICY_OBJ_TURN) {
-                auto action_result = dicision_action(input, state, mixer, obj_turn, manage_group_info);
+                auto action_result = dicision_action(input, state, mixer, obj_turn, manage_group_info, fractor_manager);
 
                 // tmp
                 act_cnt[action_result.change_color_num] += action_result.act_cnt;
