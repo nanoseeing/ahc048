@@ -1,7 +1,7 @@
+#include "hpp/color_mixer.hpp"
 #include "hpp/common.hpp"
 #include "hpp/game.hpp"
 #include "hpp/io.hpp"
-#include "hpp/nnls.hpp"
 #include "hpp/utils.hpp"
 
 // ============================================================================
@@ -19,13 +19,9 @@ long long MAX_SIMULATE_CNT = 1e7; // 分数パターンの最大数（目安）
 
 const int BUFFER_TURN = 30; // 30ターンは余裕を持たせる
 
-const double SWITH_POLICY_OBJ_TURN = 10.0;
+const double SWITH_POLICY_OBJ_TURN = 11.0;
 
-const int COMMON_MAX_COMB_SIZE = 6;
-map<int, int> MAX_COMB_SIZES = {
-    {11, 5}, {12, 5}, {13, 5}, {14, 4}, {15, 4}, {16, 4}, {17, 4}, {18, 4}, {19, 4}, {20, 4},
-};
-const int SEARCH_NUM = 100;
+const int SEARCH_NUM = 5;
 
 // ============================================================================
 // Main
@@ -582,25 +578,13 @@ DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, do
     Color target = input.target[state.deliver_cnt];
     DicisionActionPerResult per_result = DicisionActionPerResult(fractor_manager, group_info, input, state);
 
-    vector<int> comb_sizes;
-    if(MAX_COMB_SIZES.contains(input.K)) {
-        for(int i : range(2, min(MAX_COMB_SIZES[input.K], COMMON_MAX_COMB_SIZE) + 1)) {
-            comb_sizes.push_back(i);
-        }
-    } else {
-        for(int i : range(2, COMMON_MAX_COMB_SIZE + 1)) {
-            comb_sizes.push_back(i);
-        }
-    }
-
     double best_cost = 1e9;
     vector<ImmediateInfo> best_info;
-    for(int comb_size : comb_sizes) {
-        double remain_turn = obj_turn - comb_size * 4.0 - 2.0;
+    for(int comb_size : {2, 3, 4}) {
+        double remain_turn = obj_turn - comb_size * 4.0 - 3.0;
         if(remain_turn < 0.0) {
             continue; // 目標ターン数を超える場合はスキップ
         }
-
         auto results = mixer.solve_nnls(target, comb_size, SEARCH_NUM);
         for(auto &result : results) {
             int max_double_frac_num = (int)(remain_turn / 4.0); // 分数2回適応できる数
