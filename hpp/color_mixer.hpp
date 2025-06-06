@@ -9,6 +9,8 @@
 // NNLSを解くためのクラス
 // ====================================
 
+std::mt19937 engine(42);
+
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
@@ -82,11 +84,23 @@ class ColorMixer {
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 50;
 
+    const int THRESHOLD = 500; // 20C3
+
     vector<Color> paints;
     int K;
 
+    unordered_map<int, vector<vector<int>>> subsets_cache;
     ColorMixer(const vector<Color>& paints_input) : paints(paints_input) {
         K = paints.size();
+
+        for(int i = 2; i <= 4; ++i) {
+            auto subsets = construct_subsets(i, K);
+            if(subsets.size() > THRESHOLD) {
+                shuffle(subsets.begin(), subsets.end(), engine);
+                subsets.resize(min(THRESHOLD, (int)subsets.size()));
+            }
+            subsets_cache[i] = move(subsets);
+        }
     }
 
     double calc_true_error(vector<double>& weights, vector<int>& indices, Color& target) {
@@ -144,7 +158,9 @@ class ColorMixer {
     vector<Result> solve_nnls(Color& t, int comb_size, int find_top_n) {
         assert(comb_size <= 4 && comb_size >= 2);
 
-        if(comb_size == 4) {
+        vector<Result> results;
+
+        if(comb_size == 4) { // !DEBUG
             // NNLSを解けば基本的に4色だけ残るはず。
             vector<int> indices;
             for(int i = 0; i < this->K; ++i) {
@@ -162,21 +178,24 @@ class ColorMixer {
             }
             assert((int)inds4.size() <= 4);
 
-            Result new_r{r.err, // 一応計算しなおさないといけないが、ほぼ誤差の範囲のはず
-                         move(inds4), move(weights4)};
-
-            return {new_r};
-        } else {
-            // 2, 3色のNNLSを解く
-            auto subsets = construct_subsets(comb_size, this->K);
-            vector<Result> results;
-            for(auto& indices : subsets) {
-                Result r = nnls(t, indices, EPS, MAX_ITER);
-                results.emplace_back(move(r));
-            }
-            sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
-            results.resize(min(find_top_n, (int)results.size()));
-            return results;
+            // 一応計算Errorは計算しなおさないといけないが、ほぼ誤差の範囲のはず
+            Result new_r = Result{r.err, move(inds4), move(weights4)};
+            results.emplace_back(move(new_r));
         }
+
+        // 2, 3色のNNLSを解く
+        auto& subsets = subsets_cache[comb_size];
+        if(subsets.size() > THRESHOLD) {
+            shuffle(subsets.begin(), subsets.end(), engine);
+            subsets.resize(min(THRESHOLD, (int)subsets.size()));
+        }
+
+        for(auto& indices : subsets) {
+            Result r = nnls(t, indices, EPS, MAX_ITER);
+            results.emplace_back(move(r));
+        }
+        sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
+        results.resize(min(find_top_n, (int)results.size()));
+        return results;
     }
 };

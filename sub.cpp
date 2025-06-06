@@ -857,6 +857,8 @@ Xorshift64 xor_rng;
 // NNLSを解くためのクラス
 // ====================================
 
+std::mt19937 engine(42);
+
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
@@ -992,7 +994,9 @@ class ColorMixer {
     vector<Result> solve_nnls(Color& t, int comb_size, int find_top_n) {
         assert(comb_size <= 4 && comb_size >= 2);
 
-        if(comb_size == 4) {
+        vector<Result> results;
+
+        if(comb_size == 4) { // !DEBUG
             // NNLSを解けば基本的に4色だけ残るはず。
             vector<int> indices;
             for(int i = 0; i < this->K; ++i) {
@@ -1010,22 +1014,27 @@ class ColorMixer {
             }
             assert((int)inds4.size() <= 4);
 
-            Result new_r{r.err, // 一応計算しなおさないといけないが、ほぼ誤差の範囲のはず
-                         move(inds4), move(weights4)};
-
-            return {new_r};
-        } else {
-            // 2, 3色のNNLSを解く
-            auto subsets = construct_subsets(comb_size, this->K);
-            vector<Result> results;
-            for(auto& indices : subsets) {
-                Result r = nnls(t, indices, EPS, MAX_ITER);
-                results.emplace_back(move(r));
-            }
-            sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
-            results.resize(min(find_top_n, (int)results.size()));
-            return results;
+            // 一応計算Errorは計算しなおさないといけないが、ほぼ誤差の範囲のはず
+            Result new_r = Result{r.err, move(inds4), move(weights4)};
+            results.emplace_back(move(new_r));
         }
+
+        // 2, 3色のNNLSを解く
+        const int THRESHOLD = 500; // 20C3
+        // const int THRESHOLD = 10; // 20C3
+        auto subsets = construct_subsets(comb_size, this->K);
+        if(subsets.size() > THRESHOLD) {
+            shuffle(subsets.begin(), subsets.end(), engine);
+            subsets.resize(min(THRESHOLD, (int)subsets.size()));
+        }
+
+        for(auto& indices : subsets) {
+            Result r = nnls(t, indices, EPS, MAX_ITER);
+            results.emplace_back(move(r));
+        }
+        sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
+        results.resize(min(find_top_n, (int)results.size()));
+        return results;
     }
 };
 // Skipped: common.hpp already included
@@ -1429,19 +1438,12 @@ void print_output(Output &output) {
 // ============================================================================
 
 const double MAX_TIME = 2800.0;
-
 const int INIT_PARTITION_POS = 1; // パーティション初期値
-
-// const int TOP_N = 10000;
-// const int MAX_RESULT = 20;
-
-long long MAX_SIMULATE_CNT = 1e7; // 分数パターンの最大数（目安）
-
-const int BUFFER_TURN = 5; // 念のためバッファを持たせる
-
-const double SWITH_POLICY_OBJ_TURN = 11.0;
-
-const int SEARCH_NUM = 5;
+long long MAX_SIMULATE_CNT = 2e7; // 分数パターンの最大数（目安）
+const int BUFFER_TURN = 10;       // 念のためバッファを持たせる
+const double BUF_MUL_TURN = 2.0;
+const double SWITH_POLICY_OBJ_TURN = 8.0 + BUF_MUL_TURN;
+const int SEARCH_NUM = 15;
 
 // ============================================================================
 // Main
@@ -1463,6 +1465,7 @@ class ManageGroupInfo {
     int original_k;
     int init_pos;
     std::vector<GroupInfo> infos;
+    vector<pair<int, int>> reserved_changes;
 
     std::vector<std::pair<int, int>> create_root(int x, int row_num) {
         std::vector<std::pair<int, int>> roots;
@@ -1541,6 +1544,21 @@ class ManageGroupInfo {
 
     void change_now_pos(int k_index, int pos) {
         infos[k_index].now_pos = pos;
+    }
+
+    void reserve_change_pos(int k_index, int pos) {
+        reserved_changes.emplace_back(k_index, pos);
+    }
+
+    void apply_reserved_changes() {
+        for(auto &[k_index, pos] : reserved_changes) {
+            this->change_now_pos(k_index, pos);
+        }
+        reserved_changes.clear();
+    }
+
+    void reset_reserved_changes() {
+        reserved_changes.clear();
     }
 
     Action get_toggle_action(int k_index, int num) const {
@@ -1729,79 +1747,6 @@ class FractorManager {
     }
 };
 
-class PolicyGreedy {
-  public:
-    Input &input;
-    State &state;
-    vector<Color> mix_cache;
-    // unordered_map<int, vector<Color>> mix_cache;
-    // unordered_map<int, vector<vector<int>>> mix_cache_inds;
-
-    PolicyGreedy(Input &input, State &state) : input(input), state(state) {
-        construct();
-    }
-
-    void construct() {
-        mix_cache.resize(1 << input.K);
-        for(int i : range(1, 1 << input.K)) {
-            vector<Color> colors;
-            vector<double> vols;
-
-            for(int k : range(input.K)) {
-                if((i >> k) & 1) {
-                    colors.push_back(input.own[k]);
-                    vols.push_back(1.0);
-                }
-            }
-
-            Color mixed_color = mix(vols, colors);
-            mix_cache[i] = mixed_color;
-        }
-    }
-
-    void solve(double obj_turn) {
-        auto target_color = input.target[state.deliver_cnt];
-        int can_mixed_num = min(max(1, int(obj_turn / 2.0)), input.K);
-
-        double min_cost = 1e9;
-        int min_ind = -1;
-        std::vector<int> indices(input.K, 0);
-        for(int mixed_size = 0; mixed_size <= can_mixed_num; ++mixed_size) {
-            std::fill(indices.begin(), indices.end(), 0);
-            std::fill(indices.begin(), indices.begin() + mixed_size, 1);
-            do {
-                int x = 0;
-                for(int i = 0; i < input.K; ++i) {
-                    if(indices[i]) x |= (1 << i);
-                }
-                if(x == 0) continue; // 少なくとも1色は選ぶ必要がある
-                auto &mixed_color = mix_cache[x];
-                double cost = eval_error(mixed_color, target_color) * 1e4 + (double)(input.D) * (mixed_size - 1.0);
-                if(cost < min_cost) {
-                    min_cost = cost;
-                    min_ind = x;
-                }
-            } while(std::prev_permutation(indices.begin(), indices.end()));
-        }
-
-        vector<int> target_inds;
-        for(int k = 0; k < input.K; ++k) {
-            if((min_ind >> k) & 1) {
-                target_inds.push_back(k);
-            }
-        }
-
-        int mixed_size = (int)target_inds.size();
-        for(const auto &k : target_inds) {
-            state.apply(Action::Add(input.N - 1, 0, k));
-        }
-        state.apply(Action::Deliver(input.N - 1, 0));
-        for(int i : range(mixed_size - 1)) {
-            state.apply(Action::Discard(input.N - 1, 0));
-        }
-    }
-};
-
 struct ImmediateInfo {
     int k;
     bool is_add;
@@ -1816,6 +1761,7 @@ struct DicisionAction {
     vector<Action> post_actions;
     int act_cnt;
     int change_color_num;
+    double cost;
 };
 
 class DicisionActionPerResult {
@@ -1895,8 +1841,8 @@ class DicisionActionPerResult {
             auto [it_ind, max_ind] = search_target_weight_idx(k, target_vol, is_add, max_frac_cnt[comb_ind]);
             vector<ImmediateInfo> immediate_infos;
 
-            const int SEARCH_LEFT = -2;
-            const int SEARCH_RIGHT = 3;
+            const int SEARCH_LEFT = -1;
+            const int SEARCH_RIGHT = 1;
             for(int j : range(SEARCH_LEFT, SEARCH_RIGHT)) {
                 if(it_ind + j < 0 || it_ind + j >= max_ind) continue;
                 int new_ind = it_ind + j;
@@ -1954,7 +1900,7 @@ DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, Ma
                 action_result.release_actions.emplace_back(manage_group_info.get_add_paint_action(info.k));
             }
             action_result.post_actions.emplace_back(manage_group_info.get_toggle_action(info.k, INIT_PARTITION_POS));
-            manage_group_info.change_now_pos(info.k, INIT_PARTITION_POS);
+            manage_group_info.reserve_change_pos(info.k, INIT_PARTITION_POS);
         } else {
             // 分割n回適応
             int upper_partition = 0;
@@ -1989,7 +1935,7 @@ DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, Ma
                     // 分母の位置で解放する
                     action_result.release_actions.emplace_back(manage_group_info.get_toggle_action(info.k, stop_par_pos));
                     // 最後の仕切り位置は、release地点になる
-                    manage_group_info.change_now_pos(info.k, release_par_pos);
+                    manage_group_info.reserve_change_pos(info.k, release_par_pos);
                 } else {
                     // 仮止めした仕切りは解放しておく必要がある
                     action_result.post_actions.emplace_back(manage_group_info.get_toggle_action(info.k, release_par_pos));
@@ -2013,7 +1959,7 @@ DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, do
     double best_cost = 1e9;
     vector<ImmediateInfo> best_info;
     for(int comb_size : {2, 3, 4}) {
-        double remain_turn = obj_turn - comb_size * 4.0 - 3.0;
+        double remain_turn = obj_turn - comb_size * 4.0 - BUF_MUL_TURN;
         if(remain_turn < 0.0) {
             continue; // 目標ターン数を超える場合はスキップ
         }
@@ -2040,8 +1986,88 @@ DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, do
     assert((int)best_info.size() != 0);
 
     auto action_result = construct_from_immediateinfo(best_info, group_info);
+    action_result.cost = best_cost;
     return action_result;
 }
+
+class PolicyGreedy {
+  public:
+    Input &input;
+    State &state;
+    vector<Color> mix_cache;
+    // unordered_map<int, vector<Color>> mix_cache;
+    // unordered_map<int, vector<vector<int>>> mix_cache_inds;
+
+    PolicyGreedy(Input &input, State &state) : input(input), state(state) {
+        construct();
+    }
+
+    void construct() {
+        mix_cache.resize(1 << input.K);
+        for(int i : range(1, 1 << input.K)) {
+            vector<Color> colors;
+            vector<double> vols;
+
+            for(int k : range(input.K)) {
+                if((i >> k) & 1) {
+                    colors.push_back(input.own[k]);
+                    vols.push_back(1.0);
+                }
+            }
+
+            Color mixed_color = mix(vols, colors);
+            mix_cache[i] = mixed_color;
+        }
+    }
+
+    DicisionAction solve(double obj_turn) {
+        auto target_color = input.target[state.deliver_cnt];
+        int can_mixed_num = min(max(1, int(obj_turn / 2.0)), input.K);
+
+        double min_cost = 1e9;
+        int min_ind = -1;
+        std::vector<int> indices(input.K, 0);
+        for(int mixed_size = 0; mixed_size <= can_mixed_num; ++mixed_size) {
+            std::fill(indices.begin(), indices.end(), 0);
+            std::fill(indices.begin(), indices.begin() + mixed_size, 1);
+            do {
+                int x = 0;
+                for(int i = 0; i < input.K; ++i) {
+                    if(indices[i]) x |= (1 << i);
+                }
+                if(x == 0) continue; // 少なくとも1色は選ぶ必要がある
+                auto &mixed_color = mix_cache[x];
+                double cost = eval_error(mixed_color, target_color) * 1e4 + (double)(input.D) * (mixed_size - 1.0);
+                if(cost < min_cost) {
+                    min_cost = cost;
+                    min_ind = x;
+                }
+            } while(std::prev_permutation(indices.begin(), indices.end()));
+        }
+
+        vector<int> target_inds;
+        for(int k = 0; k < input.K; ++k) {
+            if((min_ind >> k) & 1) {
+                target_inds.push_back(k);
+            }
+        }
+
+        vector<Action> actions;
+        for(const auto &k : target_inds) {
+            actions.push_back(Action::Add(input.N - 1, 0, k));
+        }
+        // actions.push_back(Action::Deliver(input.N - 1, 0));
+        // for(int i : range(mixed_size - 1)) {
+        //     actions.push_back(Action::Discard(input.N - 1, 0));
+        // }
+
+        DicisionAction action_result;
+        action_result.pre_actions = actions;
+        action_result.cost = min_cost;
+        action_result.change_color_num = 99;
+        return action_result;
+    }
+};
 
 void discard_mix_well(State &state, Input &input) {
     while(state.get_paint(input.N - 1, 0).vol > 1e-6) {
@@ -2090,34 +2116,42 @@ void solve() {
             int remain_turn = input.T - state.turn - BUFFER_TURN;
             double obj_turn = (double)remain_turn / (double)(input.H - state.deliver_cnt);
 
+            DicisionAction best_act;
             if(obj_turn >= SWITH_POLICY_OBJ_TURN) {
-                auto action_result = dicision_action(input, state, mixer, obj_turn, manage_group_info, fractor_manager);
-
-                act_cnt[action_result.change_color_num] += action_result.act_cnt;
-                color_cnt[action_result.change_color_num]++;
-
-                for(const auto &act : action_result.pre_actions) {
-                    state.apply(act);
-                }
-                for(const auto &act : action_result.release_actions) {
-                    state.apply(act);
-                }
-                state.apply(Action::Deliver(input.N - 1, 0));
-                if(h == input.H - 1) {
-                    break;
-                }
-                discard_mix_well(state, input);
-                for(const auto &act : action_result.post_actions) {
-                    state.apply(act);
-                }
-
+                best_act = dicision_action(input, state, mixer, obj_turn, manage_group_info, fractor_manager);
+                // auto act2 = policy_greedy.solve(obj_turn);
+                // if(act1.cost < act2.cost) {
+                //     best_act = act1;
+                // } else {
+                //     manage_group_info.reset_reserved_changes();
+                //     best_act = act2;
+                //     policy_greedy_cnt++;
+                //     policy_err_sum += best_act.cost;
+                // }
             } else {
-                auto pre_err = state.error;
-                policy_greedy.solve(obj_turn);
-                auto post_err = state.error;
-                policy_err_sum += post_err - pre_err;
+                best_act = policy_greedy.solve(obj_turn);
                 policy_greedy_cnt++;
+                policy_err_sum += best_act.cost;
             }
+
+            act_cnt[best_act.change_color_num] += best_act.act_cnt;
+            color_cnt[best_act.change_color_num]++;
+
+            for(const auto &act : best_act.pre_actions) {
+                state.apply(act);
+            }
+            for(const auto &act : best_act.release_actions) {
+                state.apply(act);
+            }
+            state.apply(Action::Deliver(input.N - 1, 0));
+            if(h == input.H - 1) {
+                break;
+            }
+            discard_mix_well(state, input);
+            for(const auto &act : best_act.post_actions) {
+                state.apply(act);
+            }
+            manage_group_info.apply_reserved_changes();
         }
         print_info(state);
     } catch(const exception &e) {
