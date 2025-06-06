@@ -46,5 +46,11 @@ def inline_main_cpp(main_cpp_path: str, output_path: str):
         out_file.writelines(out_lines)
 
 
-# 例: main.cpp を処理して main_flattened.cpp を生成
-inline_main_cpp("main.cpp", "sub.cpp")
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(description="Inline C++ main file with included headers.")
+    parser.add_argument("--i", type=str, help="Path to the main C++ file.", default="main.cpp")
+    parser.add_argument("--o", type=str, help="Path to the output file.", default="sub.cpp")
+    args = parser.parse_args()
+    inline_main_cpp(args.i, args.o)

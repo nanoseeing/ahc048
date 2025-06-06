@@ -225,39 +225,46 @@ class ColorMixer {
         auto subsets = construct_subsets(comb_size, this->K);
         sort(ALL(subsets), [&](auto& a, auto& b) { return xor_rng.next() < 0.5; });
 
-        const int MAX_SUBSETS = 2000;
-        const int MAX_HEAVY_NNLS = 1;
+        const int MAX_SUBSETS = 500;
         if(subsets.size() > MAX_SUBSETS) {
             subsets.resize(MAX_SUBSETS);
         }
 
         // const int TEMP_HEAP_SIZE = 30;
 
-        priority_queue<Result> heap;
-        for(const auto& indices : subsets) {
-            Result r = solve_nnls_inv(t, indices);
-            if((int)heap.size() < find_top_n) {
-                heap.push(r);
-            } else if(r.err < heap.top().err) {
-                heap.pop();
-                heap.push(r);
-            }
-        }
+        // priority_queue<Result> heap;
+        // for(const auto& indices : subsets) {
+        //     Result r = solve_nnls_inv(t, indices);
+        //     if((int)heap.size() < find_top_n) {
+        //         heap.push(r);
+        //     } else if(r.err < heap.top().err) {
+        //         heap.pop();
+        //         heap.push(r);
+        //     }
+        // }
+        // vector<Result> results;
+        // while(!heap.empty()) {
+        //     auto r = heap.top();
+        //     heap.pop();
+        //     results.push_back(r);
+        //     Result r2 = solve_nnls_pdm(r.indices, t, true, EPS, MAX_ITER);
+        //     if(r2.err < r.err) {
+        //         results.push_back(r2);
+        //     } else {
+        //         results.push_back(r);
+        //     }
+        // }
+        // sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.err < b.err; });
 
         vector<Result> results;
-        while(!heap.empty()) {
-            auto r = heap.top();
-            heap.pop();
-            results.push_back(r);
-            Result r2 = solve_nnls_pdm(r.indices, t, true, EPS, MAX_ITER);
-            if(r2.err < r.err) {
-                results.push_back(r2);
-            } else {
-                results.push_back(r);
-            }
+        for(const auto& indices : subsets) {
+            Result r = solve_nnls_pdm(indices, t, true, EPS, MAX_ITER);
+            results.emplace_back(move(r));
         }
         sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.err < b.err; });
+        results.resize(min(find_top_n, (int)results.size()));
 
+        const int MAX_HEAVY_NNLS = 10;
         for(int i : range(min((int)results.size(), MAX_HEAVY_NNLS))) {
             auto& r = results[i];
             if(r.err < 1e-4) continue;

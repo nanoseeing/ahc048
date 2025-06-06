@@ -25,7 +25,7 @@ const int COMMON_MAX_COMB_SIZE = 6;
 map<int, int> MAX_COMB_SIZES = {
     {11, 5}, {12, 5}, {13, 5}, {14, 4}, {15, 4}, {16, 4}, {17, 4}, {18, 4}, {19, 4}, {20, 4},
 };
-const int SEARCH_NUM = 13;
+const int SEARCH_NUM = 100;
 
 // ============================================================================
 // Main
@@ -466,34 +466,34 @@ class DicisionActionPerResult {
         double best_cost = 1e9;
         int best_indices = 0;
 
-        // for(int x : range(1 << comb_size)) {
-        //     double sum_vol = 0.0;
-        //     for(int i : range(comb_size)) {
-        //         int j = (x >> i) & 1;
-        //         sum_vol += infos[i][j].vol;
-        //     }
-        //     if(sum_vol > 1.0 - 1e-6) {
-        //         double cost = eval_cost(x);
-        //         if(cost < best_cost) {
-        //             best_cost = cost;
-        //             best_indices = x;
-        //         }
-        //     }
-        // }
-
-        int temp_x = (1 << comb_size) - 1;
-        double sum_vol = 0.0;
-        for(int i : range(comb_size)) {
-            int j = (temp_x >> i) & 1;
-            sum_vol += infos[i][j].vol;
-        }
-        if(sum_vol > 1.0 - 1e-6) {
-            double cost = eval_cost(temp_x);
-            if(cost < best_cost) {
-                best_cost = cost;
-                best_indices = temp_x;
+        for(int x : range(1 << comb_size)) {
+            double sum_vol = 0.0;
+            for(int i : range(comb_size)) {
+                int j = (x >> i) & 1;
+                sum_vol += infos[i][j].vol;
+            }
+            if(sum_vol > 1.0 - 1e-6) {
+                double cost = eval_cost(x);
+                if(cost < best_cost) {
+                    best_cost = cost;
+                    best_indices = x;
+                }
             }
         }
+
+        // int temp_x = (1 << comb_size) - 1;
+        // double sum_vol = 0.0;
+        // for(int i : range(comb_size)) {
+        //     int j = (temp_x >> i) & 1;
+        //     sum_vol += infos[i][j].vol;
+        // }
+        // if(sum_vol > 1.0 - 1e-6) {
+        //     double cost = eval_cost(temp_x);
+        //     if(cost < best_cost) {
+        //         best_cost = cost;
+        //         best_indices = temp_x;
+        //     }
+        // }
 
         vector<ImmediateInfo> best_info;
         for(int i : range(comb_size)) {
@@ -522,8 +522,8 @@ DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, Ma
             assert(frac_size == 1);
             action_result.release_actions.emplace_back(manage_group_info.get_toggle_action(info.k, now_partition_pos));
             if(info.is_add) {
-                // 仕切りを解放してから絵の具追加する
-                action_result.pre_actions.emplace_back(manage_group_info.get_add_paint_action(info.k));
+                // 仕切りを解放してから絵の具追加する(release_act)
+                action_result.release_actions.emplace_back(manage_group_info.get_add_paint_action(info.k));
             }
             action_result.post_actions.emplace_back(manage_group_info.get_toggle_action(info.k, INIT_PARTITION_POS));
             manage_group_info.change_now_pos(info.k, INIT_PARTITION_POS);
