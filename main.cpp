@@ -19,7 +19,7 @@ long long MAX_SIMULATE_CNT = 1e7; // 分数パターンの最大数（目安）
 
 const int BUFFER_TURN = 30; // 30ターンは余裕を持たせる
 
-const double SWITH_POLICY_OBJ_TURN = 11.0;
+const double SWITH_POLICY_OBJ_TURN = 9.0;
 
 const int SEARCH_NUM = 5;
 
@@ -395,6 +395,33 @@ class DicisionActionPerResult {
         return {it_ind, rates_size};
     }
 
+    double eval_cost(vector<ImmediateInfo> &immeediate_info) {
+        auto &now_target = this->state.input.target[this->state.deliver_cnt];
+
+        double sum_vol = 0.0;
+        int add_cnt = 0;
+        vector<double> vols;
+        vector<Color> colors;
+        for(auto info : immeediate_info) {
+            vols.emplace_back(info.vol);
+            colors.emplace_back(this->input.own[info.k]);
+            sum_vol += info.vol;
+            if(info.is_add) add_cnt++;
+        }
+
+        Color mixed_color = mix(vols, colors);
+        double err_cost = eval_error(mixed_color, now_target) * 1e4;
+        double discard_cost = max(0.0, sum_vol - 1.0) * (double)(this->input.D);
+
+        int total_add_cnt = this->state.add_cnt + add_cnt;
+        if(total_add_cnt > input.H) {
+            double add_cost = (total_add_cnt - input.H) * (double)(this->input.D);
+            return err_cost + add_cost;
+        } else {
+            return err_cost + discard_cost;
+        }
+    }
+
     tuple<vector<ImmediateInfo>, double> eval_one_result(ColorMixer::Result &constrait, vector<int> &max_frac_cnt) {
         int comb_size = constrait.indices.size();
 
@@ -408,15 +435,11 @@ class DicisionActionPerResult {
             auto [it_ind, max_ind] = search_target_weight_idx(k, target_vol, is_add, max_frac_cnt[comb_ind]);
             vector<ImmediateInfo> immediate_infos;
 
-            const int SEARCH_LEFT = -1;
-            const int SEARCH_RIGHT = 1;
+            const int SEARCH_LEFT = -2;
+            const int SEARCH_RIGHT = 3;
             for(int j : range(SEARCH_LEFT, SEARCH_RIGHT)) {
-                int new_ind;
-                if(it_ind + j < 0) {
-                    new_ind = it_ind; // あえて0にする
-                } else {
-                    new_ind = it_ind + j;
-                }
+                if(it_ind + j < 0 || it_ind + j >= max_ind) continue;
+                int new_ind = it_ind + j;
                 auto [rate, fractors] = fractor_manager.get(manage_group_info.get_now_pos(k), manage_group_info.get_size(k), max_frac_cnt[comb_ind], new_ind);
                 double vol;
                 if(is_add) {
@@ -430,72 +453,21 @@ class DicisionActionPerResult {
             infos.emplace_back(move(immediate_infos));
         }
 
-        // 評価関数
-        auto eval_cost = [&](int indices) -> double {
-            auto &now_target = this->state.input.target[this->state.deliver_cnt];
-
-            double sum_vol = 0.0;
-            int add_cnt = 0;
-            vector<double> vols;
-            vector<Color> colors;
-            for(int i : range(comb_size)) {
-                int j = (indices >> i) & 1;
-                vols.emplace_back(infos[i][j].vol);
-                colors.emplace_back(this->input.own[infos[i][j].k]);
-                sum_vol += infos[i][j].vol;
-                if(infos[i][j].is_add) add_cnt++;
-            }
-
-            Color mixed_color = mix(vols, colors);
-            double err_cost = eval_error(mixed_color, now_target) * 1e4;
-            double discard_cost = max(0.0, sum_vol - 1.0) * (double)(this->input.D);
-
-            int total_add_cnt = this->state.add_cnt + add_cnt;
-            if(total_add_cnt > input.H) {
-                double add_cost = (total_add_cnt - input.H) * (double)(this->input.D);
-                return err_cost + add_cost;
-            } else {
-                return err_cost + discard_cost;
-            }
-        };
-
         double best_cost = 1e9;
-        int best_indices = 0;
-
-        for(int x : range(1 << comb_size)) {
+        vector<ImmediateInfo> best_info;
+        cartesian_product(infos, [&](vector<ImmediateInfo> &comb) {
             double sum_vol = 0.0;
-            for(int i : range(comb_size)) {
-                int j = (x >> i) & 1;
-                sum_vol += infos[i][j].vol;
+            for(const auto &info : comb) {
+                sum_vol += info.vol;
             }
             if(sum_vol > 1.0 - 1e-6) {
-                double cost = eval_cost(x);
+                double cost = eval_cost(comb);
                 if(cost < best_cost) {
                     best_cost = cost;
-                    best_indices = x;
+                    best_info = comb;
                 }
             }
-        }
-
-        // int temp_x = (1 << comb_size) - 1;
-        // double sum_vol = 0.0;
-        // for(int i : range(comb_size)) {
-        //     int j = (temp_x >> i) & 1;
-        //     sum_vol += infos[i][j].vol;
-        // }
-        // if(sum_vol > 1.0 - 1e-6) {
-        //     double cost = eval_cost(temp_x);
-        //     if(cost < best_cost) {
-        //         best_cost = cost;
-        //         best_indices = temp_x;
-        //     }
-        // }
-
-        vector<ImmediateInfo> best_info;
-        for(int i : range(comb_size)) {
-            int j = (best_indices >> i) & 1;
-            best_info.emplace_back(infos[i][j]);
-        }
+        });
 
         return {best_info, best_cost};
     }
@@ -581,7 +553,7 @@ DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, do
     double best_cost = 1e9;
     vector<ImmediateInfo> best_info;
     for(int comb_size : {2, 3, 4}) {
-        double remain_turn = obj_turn - comb_size * 4.0 - 3.0;
+        double remain_turn = obj_turn - comb_size * 4.0 - 1.0;
         if(remain_turn < 0.0) {
             continue; // 目標ターン数を超える場合はスキップ
         }

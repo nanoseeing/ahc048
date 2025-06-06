@@ -1,9 +1,4 @@
-#include <bits/stdc++.h>
-using namespace std;
-#include <Eigen/Core>
-#include <Eigen/Dense>
-#include <array>
-#include <vector>
+
 
 
 // =========================================================
@@ -455,7 +450,6 @@ void NNLS<MatrixType>::solveInactiveSet_(const RhsVectorType &b) {
 
 #endif // EIGEN_NNLS_H
 // Skipped: common.hpp already included
-// Skipped: common.hpp already included
 
 // =========================================================
 // Utils
@@ -859,6 +853,185 @@ vector<vector<int>> choose_nCk(const int N, const int K, int max_comb = 10000) {
 }
 
 Xorshift64 xor_rng;
+// ====================================
+// NNLSを解くためのクラス
+// ====================================
+
+#include <Eigen/Core>
+#include <Eigen/Dense>
+
+// 単純体への射影関数
+Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd& v) {
+    const int n = v.size();
+    std::vector<double> u(n);
+    for(int i = 0; i < n; ++i)
+        u[i] = v[i];
+    std::sort(u.begin(), u.end(), std::greater<double>());
+
+    std::vector<double> cumsum(n);
+    cumsum[0] = u[0];
+    for(int i = 1; i < n; ++i)
+        cumsum[i] = cumsum[i - 1] + u[i];
+
+    int rho = -1;
+    double theta = 0;
+    for(int j = 0; j < n; ++j) {
+        double t = (cumsum[j] - 1.0) / (j + 1);
+        if(u[j] - t > 0) {
+            rho = j;
+            theta = t;
+        }
+    }
+    if(rho < 0) {
+        return Eigen::VectorXd::Constant(n, 1.0 / n);
+    }
+    Eigen::VectorXd w(n);
+    for(int i = 0; i < n; ++i) {
+        w[i] = std::max(v[i] - theta, 0.0);
+    }
+    return w;
+}
+
+vector<vector<int>> construct_subsets(int size, int k) {
+    vector<vector<int>> subsets;
+    vector<int> comb(size);
+    function<void(int, int)> dfs = [&](int start, int depth) {
+        if(depth == size) {
+            subsets.emplace_back(comb.begin(), comb.end());
+            return;
+        }
+        for(int x = start; x < k; x++) {
+            comb[depth] = x;
+            dfs(x + 1, depth + 1);
+        }
+    };
+    dfs(0, 0);
+
+    return subsets;
+}
+
+class ColorMixer {
+  public:
+    struct Result {
+        double err;
+        vector<int> indices;
+        vector<double> weights;
+
+        bool operator<(Result const& o) const {
+            return err < o.err;
+        }
+    };
+
+    struct SubsetInfo {
+        int size;
+        vector<int> indices;
+    };
+
+    static constexpr double EPS = 1e-7;
+    static constexpr int MAX_ITER = 50;
+
+    vector<Color> paints;
+    int K;
+
+    ColorMixer(const vector<Color>& paints_input) : paints(paints_input) {
+        K = paints.size();
+    }
+
+    double calc_true_error(vector<double>& weights, vector<int>& indices, Color& target) {
+        double true_err = 0.0;
+        for(int j = 0; j < 3; ++j) {
+            double now_c = 0.0;
+            for(int i = 0; i < (int)indices.size(); ++i) {
+                int idx = indices[i];
+                now_c += paints[idx][j] * weights[i];
+            }
+            double diff = now_c - target[j];
+            true_err += diff * diff;
+        }
+        return sqrt(true_err);
+    }
+
+    Result nnls(Color& target, vector<int>& indices, double tol, double iter) {
+        const int N = indices.size();
+
+        Eigen::MatrixXd A_ext;
+        A_ext.resize(4, N);
+        for(int k = 0; k < N; ++k) {
+            auto col = this->paints[indices[k]];
+            Eigen::Vector3d c(col[0], col[1], col[2]);
+            A_ext.block<3, 1>(0, k) = c;
+        }
+        A_ext.row(3).setOnes();
+
+        Eigen::NNLS<Eigen::MatrixXd> nnls_solver;
+        nnls_solver.compute(A_ext);
+        nnls_solver.setTolerance(tol);
+        nnls_solver.setMaxIterations(iter);
+
+        Eigen::Vector4d t_ext;
+        t_ext(0) = target[0];
+        t_ext(1) = target[1];
+        t_ext(2) = target[2];
+        t_ext(3) = 1.0; // 「和が１になる」項を擬似的に加える
+
+        Eigen::VectorXd x = nnls_solver.solve(t_ext);
+        x = ProjectOntoSimplex(x); // 射影して非負かつ合計が1にする
+
+        double sum_w = x.sum();
+        assert(abs(sum_w - 1.0) < 1e-6);
+
+        vector<double> weights;
+        for(int i = 0; i < N; ++i) {
+            weights.push_back(x(i) / sum_w); // 射影すれば1になるはずだが念のため正規化しておく
+        }
+
+        double true_err = calc_true_error(weights, indices, target);
+        return Result{true_err, indices, weights};
+    }
+
+    vector<Result> solve_nnls(Color& t, int comb_size, int find_top_n) {
+        assert(comb_size <= 4 && comb_size >= 2);
+
+        if(comb_size == 4) {
+            // NNLSを解けば基本的に4色だけ残るはず。
+            vector<int> indices;
+            for(int i = 0; i < this->K; ++i) {
+                indices.push_back(i);
+            }
+            Result r = nnls(t, indices, EPS, MAX_ITER);
+
+            vector<int> inds4;
+            vector<double> weights4;
+            for(int i = 0; i < this->K; ++i) {
+                if(r.weights[i] > EPS) {
+                    inds4.push_back(i);
+                    weights4.push_back(r.weights[i]);
+                }
+            }
+            assert((int)inds4.size() <= 4);
+
+            Result new_r{r.err, // 一応計算しなおさないといけないが、ほぼ誤差の範囲のはず
+                         move(inds4), move(weights4)};
+
+            return {new_r};
+        } else {
+            // 2, 3色のNNLSを解く
+            auto subsets = construct_subsets(comb_size, this->K);
+            vector<Result> results;
+            for(auto& indices : subsets) {
+                Result r = nnls(t, indices, EPS, MAX_ITER);
+                results.emplace_back(move(r));
+            }
+            sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
+            results.resize(min(find_top_n, (int)results.size()));
+            return results;
+        }
+    }
+};
+// Skipped: common.hpp already included
+// Skipped: common.hpp already included
+// Skipped: utils.hpp already included
+
 // =========================================================
 // Game
 // =========================================================
@@ -1251,178 +1424,683 @@ void print_output(Output &output) {
     }
 }// Skipped: utils.hpp already included
 
-double true_error(Input &input, vector<double> &weights, vector<int> &indices, Color &target_color) {
-    double true_err = 0.0;
-    for(int j = 0; j < 3; ++j) {
-        double now_c = 0.0;
-        for(int i : indices) {
-            now_c += input.own[i][j] * weights[i];
-        }
-        double diff = now_c - target_color[j];
-        true_err += diff * diff;
-    }
-    return true_err;
-}
+// ============================================================================
+// 定義
+// ============================================================================
 
-vector<vector<int>> construct_subsets(int size, int k) {
-    vector<vector<int>> subsets;
-    vector<int> comb(size);
-    function<void(int, int)> dfs = [&](int start, int depth) {
-        if(depth == size) {
-            subsets.emplace_back(comb.begin(), comb.end());
-            return;
-        }
-        for(int x = start; x < k; x++) {
-            comb[depth] = x;
-            dfs(x + 1, depth + 1);
-        }
-    };
-    dfs(0, 0);
+const double MAX_TIME = 2800.0;
 
-    return subsets;
-}
+const int INIT_PARTITION_POS = 1; // パーティション初期値
 
-int main() {
-    Input input = parse_input();
+// const int TOP_N = 10000;
+// const int MAX_RESULT = 20;
 
-    const int K = input.K;
-    auto subsets = construct_subsets(K, input.K);
+long long MAX_SIMULATE_CNT = 1e7; // 分数パターンの最大数（目安）
 
-    TimeKeeper timer(100.0);
+const int BUFFER_TURN = 30; // 30ターンは余裕を持たせる
 
-    vector<double> best_errs(input.H);
-    for(int h = 0; h < input.H; ++h) {
-        vector<double> true_errors;
-        for(auto &subset : subsets) {
-            Eigen::MatrixXd A_ext;
-            A_ext.resize(4, K);
-            for(int k = 0; k < K; ++k) {
-                auto col = input.own[subset[k]];
-                Eigen::Vector3d c(col[0], col[1], col[2]);
-                A_ext.block<3, 1>(0, k) = c; // 上3行
+const double SWITH_POLICY_OBJ_TURN = 11.0;
+
+const int SEARCH_NUM = 5;
+
+// ============================================================================
+// Main
+// ============================================================================
+
+struct GroupInfo {
+    int k;
+    int row_num;
+    int start_x;
+    std::vector<std::pair<int, int>> roots;
+    int now_pos;
+    int size;
+};
+
+class ManageGroupInfo {
+  private:
+    int n;
+    int k;
+    int original_k;
+    int init_pos;
+    std::vector<GroupInfo> infos;
+
+    std::vector<std::pair<int, int>> create_root(int x, int row_num) {
+        std::vector<std::pair<int, int>> roots;
+        roots.emplace_back(n - 1, x);
+
+        for(int r = 0; r < row_num; ++r) {
+            if(r % 2 == 0) {
+                for(int i = n - 2; i >= 0; --i) {
+                    roots.emplace_back(i, x + r);
+                }
+            } else {
+                for(int i = 0; i < n - 1; ++i) {
+                    roots.emplace_back(i, x + r);
+                }
             }
-            A_ext.row(3).setOnes();
+        }
 
-            Eigen::NNLS<Eigen::MatrixXd> nnls_solver;
-            nnls_solver.compute(A_ext);
-            nnls_solver.setTolerance(1e-7);
-            nnls_solver.setMaxIterations(50);
+        std::reverse(roots.begin(), roots.end());
+        return roots;
+    }
 
-            Eigen::Vector4d t_ext;
-            t_ext(0) = input.target[h][0];
-            t_ext(1) = input.target[h][1];
-            t_ext(2) = input.target[h][2];
-            t_ext(3) = 1.0; // 「和が１になる」項を擬似的に加える
+    std::vector<GroupInfo> construct_group_info() {
+        std::vector<int> num_list(k, 1);
+        for(int i = 0; i < n - k; ++i) {
+            num_list[0] += 1;
+            std::sort(num_list.begin(), num_list.end());
+        }
 
-            Eigen::VectorXd x = nnls_solver.solve(t_ext);
-            Eigen::Vector4d c_hat_ext = A_ext * x;
-            double sq_error_ext = (t_ext - c_hat_ext).squaredNorm();
-            double sq_error_rgb =
-                (Eigen::Vector3d(c_hat_ext(0), c_hat_ext(1), c_hat_ext(2)) - Eigen::Vector3d(input.target[h][0], input.target[h][1], input.target[h][2]))
-                    .squaredNorm();
+        std::vector<int> acc_num_list(k, 0);
+        for(int i = 0; i < k - 1; ++i) {
+            acc_num_list[i + 1] = num_list[i] + acc_num_list[i];
+        }
 
-            double sum_w = x.sum();
-            vector<double> weights(K);
-            int nonw_zero_count = 0;
-            for(int i = 0; i < K; ++i) {
-                weights[i] = x(i) / sum_w;
-                if(weights[i] > 1e-6) {
-                    nonw_zero_count++;
+        std::vector<GroupInfo> result;
+        result.reserve(k);
+        for(int ki = 0; ki < k; ++ki) {
+            int row_num = num_list[ki];
+            int start_x = acc_num_list[ki];
+            auto roots = create_root(start_x, row_num);
+
+            GroupInfo info;
+            info.k = ki;
+            info.row_num = row_num;
+            info.start_x = start_x;
+            info.roots = std::move(roots);
+            info.now_pos = init_pos;
+            info.size = static_cast<int>(info.roots.size()) - 1;
+            result.push_back(std::move(info));
+        }
+
+        return result;
+    }
+
+  public:
+    ManageGroupInfo(int n_, int k_, int original_k_, int init_pos_ = 2) : n(n_), k(k_), original_k(original_k_), init_pos(init_pos_) {
+        infos = construct_group_info();
+    }
+
+    int get_start_x(int k_index) const {
+        return infos[k_index].start_x;
+    }
+
+    int get_now_pos(int k_index) const {
+        return infos[k_index].now_pos;
+    }
+
+    int get_size(int k_index) const {
+        return infos[k_index].size;
+    }
+    std::tuple<int, int, int, int> get_partition_pos(int k_index, int num) const {
+        assert(0 < num && num <= infos[k_index].size);
+        auto [y1, x1] = infos[k_index].roots[num - 1];
+        auto [y2, x2] = infos[k_index].roots[num];
+        return {y1, x1, y2, x2};
+    }
+
+    void change_now_pos(int k_index, int pos) {
+        infos[k_index].now_pos = pos;
+    }
+
+    Action get_toggle_action(int k_index, int num) const {
+        auto [y1, x1, y2, x2] = this->get_partition_pos(k_index, num);
+        return Action::Toggle(y1, x1, y2, x2);
+    }
+
+    Action get_add_paint_action(int k_index) const {
+        auto [y, x] = infos[k_index].roots[0];
+        return Action::Add(y, x, k_index % this->original_k);
+    }
+
+    Action get_deliver_paint_action(int k_index) const {
+        auto [y, x] = infos[k_index].roots[0];
+        return Action::Deliver(y, x);
+    }
+
+    Paint get_paint(int k_index, const State &state) const {
+        auto [y, x] = infos[k_index].roots[0];
+        auto paint = state.get_paint(y, x);
+        return paint;
+    }
+
+    Wall struct_init_wall(Input &input_data) {
+        vector<vector<bool>> wall_h(input_data.N - 1, vector<bool>(input_data.N, false));
+        vector<vector<bool>> wall_v(input_data.N, vector<bool>(input_data.N - 1, false));
+
+        for(int x : range(input_data.N - 1)) {
+            for(int y : range(input_data.N - 1)) {
+                wall_v[y][x] = true;
+            }
+        }
+        for(int x : range(input_data.N)) {
+            wall_h[input_data.N - 2][x] = true;
+        }
+
+        // ルート内の仕切りを外す
+        for(int k : range(input_data.K)) {
+            const int root_size = (int)infos[k].roots.size();
+            for(int i : range(1, root_size)) {
+                auto [y1, x1] = infos[k].roots[i - 1];
+                auto [y2, x2] = infos[k].roots[i];
+                if(y1 == y2) {
+                    wall_v[y1][min(x1, x2)] = false;
+                } else {
+                    wall_h[min(y1, y2)][x1] = false;
+                }
+            }
+        }
+
+        // 初期のパーティション位置を設定
+        for(int k : range(input_data.K)) {
+            auto [y1, x1, y2, x2] = this->get_partition_pos(k, this->init_pos);
+            if(y1 == y2) {
+                wall_v[y1][min(x1, x2)] = true;
+            } else {
+                wall_h[min(y1, y2)][x1] = true;
+            }
+        }
+
+        // 混合する仕切りを開けておく
+        for(int k : range(input_data.K)) {
+            int s = this->get_size(k);
+            auto [y1, x1, y2, x2] = this->get_partition_pos(k, s);
+            assert(x1 == x2);
+            wall_h[min(y1, y2)][x1] = false;
+        }
+
+        return Wall(wall_h, wall_v);
+    }
+};
+
+class FractorManager {
+    using KEY = tuple<int, int, int>; // (init_pos, max_denom, apply_frac_cnt)
+
+  private:
+    unordered_map<KEY, vector<Fractors>> fractor_map;
+    unordered_map<KEY, vector<double>> rates_map;
+
+  public:
+    FractorManager(vector<int> &max_denominators) {
+        for(auto &max_denom : max_denominators) {
+            this->construct(max_denom, 1);
+            this->construct(max_denom, 2);
+        }
+    }
+
+    double calc_rate(const Fractors &fractors) const {
+        double rate = 1.0;
+        for(auto &fractor : fractors) {
+            if(fractor.first == -1) {
+                rate = 0.0;
+            } else {
+                rate *= (double)(fractor.first) / (double)(fractor.second);
+            }
+        }
+        return rate;
+    }
+
+    void construct(int max_denom, int apply_frac_cnt) {
+        vector<Fractors> fractors;
+        vector<double> rates;
+
+        // 全開放
+        fractors.push_back({make_pair(1, 1)});
+        rates.push_back(1.0);
+
+        // 何もしない
+        fractors.push_back({make_pair(-1, -1)});
+        rates.push_back(0.0);
+
+        // !INFO
+        // 分数の適応パターンが多すぎる場合、パターンの列挙だけでTLEする可能性がある。
+        // 仕方なくパターン数を減らすが、もっと良い方法があるかもしれない。
+
+        int MAX_STEP = 1;
+        long long simulate_cnt = pow(max_denom, 5);
+        if(simulate_cnt > MAX_SIMULATE_CNT) {
+            double div = (double)simulate_cnt / (double)MAX_SIMULATE_CNT;
+            MAX_STEP = max(1, int(round(pow(div, 1.0 / 5.0))));
+        }
+
+        unordered_set<Fractor> fractor_set;
+        for(int init_pos : range(max_denom, 0, -1)) {
+            for(int fractor_cnt : range(apply_frac_cnt)) {
+                // 分数1回適応
+                if(fractor_cnt == 0) {
+                    for(int denominator : range(init_pos, max_denom + 1)) {
+                        for(int numerator : range(1, denominator)) {
+                            Fractor fractor = make_pair(numerator, denominator);
+                            Fractor reduced_fractor = reduce_fraction(fractor);
+                            if(fractor_set.contains(reduced_fractor)) continue;
+                            fractor_set.insert(reduced_fractor);
+                            fractors.push_back({fractor});
+                            rates.emplace_back(calc_rate(fractors.back()));
+                        }
+                    }
+                } else if(fractor_cnt == 1) {
+                    // 分数2回適応
+                    for(int d1 : range(init_pos + 1, max_denom + 1, MAX_STEP)) {
+                        for(int n1 : range(1, d1, MAX_STEP)) {
+                            Fractor f1 = make_pair(n1, d1);
+                            // 次の分母の最小値 = 下側のブロック数 = 前の分子
+                            // 次の分母の最大値 += 最大ブロック数 - 前の分母
+                            for(int d2 : range(max(2, n1), n1 + (max_denom - d1) + 1, MAX_STEP)) {
+                                for(int n2 : range(1, d2, MAX_STEP)) {
+                                    Fractor f2 = make_pair(n2, d2);
+                                    Fractor fractor = mul_fracs({f1, f2});
+                                    if(fractor_set.contains(fractor)) continue;
+                                    fractor_set.insert(fractor);
+                                    fractors.push_back({f1, f2});
+                                    rates.emplace_back(calc_rate(fractors.back()));
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            double sum_new_w = accumulate(weights.begin(), weights.end(), 0.0);
+            // 2分探索のためソートしておく必要がある
+            auto inds = make_sorted_indices(rates);
+            reorder_vector(fractors, inds);
+            reorder_vector(rates, inds);
 
-            assert(abs(sum_new_w - 1.0) < 1e-6);
-            double true_err = true_error(input, weights, subset, input.target[h]);
-
-            true_errors.push_back(true_err);
+            KEY key = make_tuple(init_pos, max_denom, apply_frac_cnt);
+            fractor_map[key] = fractors;
+            rates_map[key] = rates;
         }
-        double min_true_err = *min_element(true_errors.begin(), true_errors.end());
-        best_errs[h] = min_true_err;
     }
 
-    for(auto &te : best_errs) {
-        cerr << boost::format("%.4f ") % (te * 1e4);
+    const vector<Fractors> &get_fractors(int pos, int max_denom, int apply_frac_cnt) const {
+        KEY key = make_tuple(pos, max_denom, apply_frac_cnt);
+        return fractor_map.at(key);
     }
 
-    cerr << endl;
+    const vector<double> &get_rates(int pos, int max_denom, int apply_frac_cnt) const {
+        KEY key = make_tuple(pos, max_denom, apply_frac_cnt);
+        return rates_map.at(key);
+    }
 
-    return 0;
+    pair<double, Fractors> get(int pos, int max_denom, int apply_frac_cnt, int i) const {
+        KEY key = make_tuple(pos, max_denom, apply_frac_cnt);
+        auto &frac = fractor_map.at(key)[i];
+        auto &rate = rates_map.at(key)[i];
+        return {rate, frac};
+    }
+};
+
+void PolicyGreedy(Input &input, State &state, ManageGroupInfo &group_info) {
+    auto target_color = input.target[state.deliver_cnt];
+
+    double min_cost = 1e9;
+    int min_k = -1;
+    bool is_add = false;
+    for(int k : range(state.input.K)) {
+        Paint paint = group_info.get_paint(k, state);
+        double now_cost = eval_error(input.own[k], target_color) * 1e4;
+        bool now_is_add = (paint.vol < 1.0 - 1e-6) ? true : false; // 1g未満なら追加が必要
+        if(now_is_add) now_cost += state.input.D;
+        if(now_cost < min_cost) {
+            min_cost = now_cost;
+            min_k = k;
+            is_add = now_is_add;
+        }
+    }
+
+    if(is_add) {
+        int now_pos = group_info.get_now_pos(min_k);
+        if(now_pos == 1) {
+            // 仕切りが1しかない場合は、仕切りを追加する
+            const int POS = 2;
+            state.apply(group_info.get_toggle_action(min_k, POS));
+            state.apply(group_info.get_toggle_action(min_k, now_pos));
+            group_info.change_now_pos(min_k, POS);
+        }
+        state.apply(group_info.get_add_paint_action(min_k));
+    }
+
+    state.apply(group_info.get_deliver_paint_action(min_k));
 }
 
-// int main() {
-//     Input input = parse_input();
+struct ImmediateInfo {
+    int k;
+    bool is_add;
+    double rate;
+    double vol;
+    Fractors fractors;
+};
 
-//     Eigen::MatrixXd A;
-//     A.resize(3, input.K);
-//     for(int k = 0; k < input.K; ++k) {
-//         auto col = input.own[k];
-//         Eigen::Vector3d c(col[0], col[1], col[2]);
-//         A.col(k) = c;
-//     }
+struct DicisionAction {
+    vector<Action> pre_actions;
+    vector<Action> release_actions;
+    vector<Action> post_actions;
+    int act_cnt;
+    int change_color_num;
+};
 
-//     vector<int> indices(input.K);
-//     iota(indices.begin(), indices.end(), 0);
+class DicisionActionPerResult {
+  public:
+    FractorManager &fractor_manager;
+    ManageGroupInfo &manage_group_info;
+    Input &input;
+    State &state;
 
-//     TimeKeeper timer(100.0);
-//     vector<double> errors(input.H);
-//     for(int h : range(input.H)) {
-//         Eigen::NNLS<Eigen::MatrixXd> nnls_solver;
-//         nnls_solver.compute(A);
+    DicisionActionPerResult(FractorManager &fractor_manager_, ManageGroupInfo &manage_group_info_, Input &input_, State &state_)
+        : fractor_manager(fractor_manager_), manage_group_info(manage_group_info_), input(input_), state(state_) {
+    }
 
-//         nnls_solver.setTolerance(1e-12);
-//         nnls_solver.setMaxIterations(10000);
-//         Eigen::Vector3d t(input.target[h][0], input.target[h][1], input.target[h][2]);
-//         Eigen::VectorXd x = nnls_solver.solve(t);
-//         Eigen::Vector3d c_hat = A * x;
-//         double sq_error = (t - c_hat).squaredNorm();
-//         double sum_w = x.sum();
-//         vector<double> weights(input.K);
-//         for(int i = 0; i < input.K; ++i) {
-//             weights[i] = x(i) / sum_w; // 重みを正規化
-//         }
-//         double sum_new_w = accumulate(weights.begin(), weights.end(), 0.0);
-//         assert(abs(sum_new_w - 1.0) < 1e-6); // 重みの合計が 1 に近いことを確認
-//         double true_err = true_error(input, weights, indices, input.target[h]);
-//         double diff = abs(sq_error - true_err);
-//         cerr << boost::format(" %d: sq_error = %.4f, true_err = %.4f, diff = %.4f\n") % h % (sq_error * 1e4) % (true_err * 1e4) % (diff * 1e4);
-//         // cerr << " " << h << ": " << sq_error * 1e4 << "\n";
-//     }
-//     cerr << "NNLS finished.\n";
-//     cerr << "Total time: " << timer.getElapsedTime() << " seconds.\n";
+    tuple<int, int> search_target_weight_idx(int k, double target_vol, bool is_add, int max_mul_cnt) {
+        double now_vol = manage_group_info.get_paint(k, this->state).vol;
+        int now_pos = manage_group_info.get_now_pos(k);
+        int max_group_size = manage_group_info.get_size(k);
+        auto &rates = fractor_manager.get_rates(now_pos, max_group_size, max_mul_cnt);
 
-//     return 0;
-// }
+        // ---------------------------------------
+        // now_vol * rate = target_vol
+        // rate = target_vol / now_vol
+        // rate = target_vol / (now_vol + 1.0)
+        // ---------------------------------------
+        double search_rate;
+        if(is_add) {
+            search_rate = target_vol / (1.0 + now_vol);
+        } else {
+            search_rate = target_vol / now_vol;
+        }
+        auto it = upper_bound(ALL(rates), search_rate);
+        int it_ind = distance(rates.begin(), it);
+        int rates_size = (int)rates.size();
+        if(it_ind >= rates_size) {
+            it_ind = rates_size - 1;
+        }
+        return {it_ind, rates_size};
+    }
 
-// int main() {
-//     Input input = parse_input();
+    double eval_cost(vector<ImmediateInfo> &immeediate_info) {
+        auto &now_target = this->state.input.target[this->state.deliver_cnt];
 
-//     Eigen::Matrix<double, 3, 20> A;
-//     // A.resize(3, input.K);
-//     for(int k = 0; k < input.K; ++k) {
-//         auto col = input.own[k];
-//         Eigen::Vector3d c(col[0], col[1], col[2]);
-//         A.col(k) = c;
-//     }
+        double sum_vol = 0.0;
+        int add_cnt = 0;
+        vector<double> vols;
+        vector<Color> colors;
+        for(auto info : immeediate_info) {
+            vols.emplace_back(info.vol);
+            colors.emplace_back(this->input.own[info.k]);
+            sum_vol += info.vol;
+            if(info.is_add) add_cnt++;
+        }
 
-//     Eigen::NNLS<Eigen::Matrix<double, 3, 20>> nnls_solver;
-//     nnls_solver.compute(A);
+        Color mixed_color = mix(vols, colors);
+        double err_cost = eval_error(mixed_color, now_target) * 1e4;
+        double discard_cost = max(0.0, sum_vol - 1.0) * (double)(this->input.D);
 
-//     nnls_solver.setTolerance(1e-7);
-//     nnls_solver.setMaxIterations(30);
+        int total_add_cnt = this->state.add_cnt + add_cnt;
+        if(total_add_cnt > input.H) {
+            double add_cost = (total_add_cnt - input.H) * (double)(this->input.D);
+            return err_cost + add_cost;
+        } else {
+            return err_cost + discard_cost;
+        }
+    }
 
-//     TimeKeeper timer(100.0);
-//     vector<double> errors(input.H);
-//     for(int h : range(input.H)) {
-//         Eigen::Vector3d t(input.target[h][0], input.target[h][1], input.target[h][2]);
-//         Eigen::Vector<double, 20> x = nnls_solver.solve(t);
-//         Eigen::Vector3d c_hat = A * x;
-//         double sq_error = (t - c_hat).squaredNorm();
-//         // cerr << " " << h << ": " << sq_error * 1e4 << "\n";
-//     }
-//     cerr << "NNLS finished.\n";
-//     cerr << "Total time: " << timer.getElapsedTime() << " seconds.\n";
+    tuple<vector<ImmediateInfo>, double> eval_one_result(ColorMixer::Result &constrait, vector<int> &max_frac_cnt) {
+        int comb_size = constrait.indices.size();
 
-//     return 0;
-// }
+        // 2^comb_size 個の組み合わせを評価する
+        vector<vector<ImmediateInfo>> infos;
+        for(int comb_ind : range(comb_size)) {
+            auto &k = constrait.indices[comb_ind];
+            auto &target_vol = constrait.weights[comb_ind];
+            double now_vol = manage_group_info.get_paint(k, state).vol;
+            bool is_add = (target_vol > now_vol) ? true : false;
+            auto [it_ind, max_ind] = search_target_weight_idx(k, target_vol, is_add, max_frac_cnt[comb_ind]);
+            vector<ImmediateInfo> immediate_infos;
+
+            const int SEARCH_LEFT = -2;
+            const int SEARCH_RIGHT = 3;
+            for(int j : range(SEARCH_LEFT, SEARCH_RIGHT)) {
+                if(it_ind + j < 0 || it_ind + j >= max_ind) continue;
+                int new_ind = it_ind + j;
+                auto [rate, fractors] = fractor_manager.get(manage_group_info.get_now_pos(k), manage_group_info.get_size(k), max_frac_cnt[comb_ind], new_ind);
+                double vol;
+                if(is_add) {
+                    vol = (now_vol + 1.0) * rate;
+                } else {
+                    vol = now_vol * rate;
+                }
+                ImmediateInfo info = {.k = k, .is_add = is_add, .rate = rate, .vol = vol, .fractors = fractors};
+                immediate_infos.emplace_back(info);
+            }
+            infos.emplace_back(move(immediate_infos));
+        }
+
+        double best_cost = 1e9;
+        vector<ImmediateInfo> best_info;
+        cartesian_product(infos, [&](vector<ImmediateInfo> &comb) {
+            double sum_vol = 0.0;
+            for(const auto &info : comb) {
+                sum_vol += info.vol;
+            }
+            if(sum_vol > 1.0 - 1e-6) {
+                double cost = eval_cost(comb);
+                if(cost < best_cost) {
+                    best_cost = cost;
+                    best_info = comb;
+                }
+            }
+        });
+
+        return {best_info, best_cost};
+    }
+};
+
+DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, ManageGroupInfo &manage_group_info) {
+    DicisionAction action_result;
+    action_result.change_color_num = (int)best_info.size();
+
+    for(auto &info : best_info) {
+        int now_partition_pos = manage_group_info.get_now_pos(info.k);
+        int frac_size = info.fractors.size();
+
+        auto &first_fractor = info.fractors[0];
+        if(first_fractor.first == -1 && first_fractor.second == -1) {
+            // 何もしない
+            continue;
+        } else if(first_fractor.first == 1 && first_fractor.second == 1) {
+            // 全開放
+            assert(frac_size == 1);
+            action_result.release_actions.emplace_back(manage_group_info.get_toggle_action(info.k, now_partition_pos));
+            if(info.is_add) {
+                // 仕切りを解放してから絵の具追加する(release_act)
+                action_result.release_actions.emplace_back(manage_group_info.get_add_paint_action(info.k));
+            }
+            action_result.post_actions.emplace_back(manage_group_info.get_toggle_action(info.k, INIT_PARTITION_POS));
+            manage_group_info.change_now_pos(info.k, INIT_PARTITION_POS);
+        } else {
+            // 分割n回適応
+            int upper_partition = 0;
+            int lower_partition = now_partition_pos;
+            for(int fi : range(frac_size)) {
+                auto &fractor = info.fractors[fi];
+
+                // 上の仕切りから、分母だけ進んだのがstopしたいしきり位置
+                int stop_par_pos = upper_partition + fractor.second;
+                // stopする仕切りから、分子だけ進んだのが、releaseする仕切り位置
+                int release_par_pos = stop_par_pos - fractor.first;
+
+                if(stop_par_pos != lower_partition) {
+                    // 現在の仕切りを動かす必要があるなら、仕切りを拡張する
+                    action_result.pre_actions.emplace_back(manage_group_info.get_toggle_action(info.k, stop_par_pos));
+                    action_result.pre_actions.emplace_back(manage_group_info.get_toggle_action(info.k, lower_partition));
+                    // 拡張した後に追加する
+                    if(fi == 0 && info.is_add) {
+                        action_result.pre_actions.emplace_back(manage_group_info.get_add_paint_action(info.k));
+                    }
+                } else {
+                    // 追加する
+                    if(fi == 0 && info.is_add) {
+                        assert(lower_partition > 1);
+                        action_result.pre_actions.emplace_back(manage_group_info.get_add_paint_action(info.k));
+                    }
+                }
+                // 分子の位置で止める
+                action_result.pre_actions.emplace_back(manage_group_info.get_toggle_action(info.k, release_par_pos));
+
+                if(fi == frac_size - 1) {
+                    // 分母の位置で解放する
+                    action_result.release_actions.emplace_back(manage_group_info.get_toggle_action(info.k, stop_par_pos));
+                    // 最後の仕切り位置は、release地点になる
+                    manage_group_info.change_now_pos(info.k, release_par_pos);
+                } else {
+                    // 仮止めした仕切りは解放しておく必要がある
+                    action_result.post_actions.emplace_back(manage_group_info.get_toggle_action(info.k, release_par_pos));
+                }
+
+                upper_partition = release_par_pos;
+                lower_partition = stop_par_pos;
+            }
+        }
+    }
+    int act_cnt = action_result.pre_actions.size() + action_result.release_actions.size() + action_result.post_actions.size();
+    action_result.act_cnt = act_cnt;
+
+    return action_result;
+}
+
+DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, double obj_turn, ManageGroupInfo &group_info, FractorManager &fractor_manager) {
+    Color target = input.target[state.deliver_cnt];
+    DicisionActionPerResult per_result = DicisionActionPerResult(fractor_manager, group_info, input, state);
+
+    double best_cost = 1e9;
+    vector<ImmediateInfo> best_info;
+    for(int comb_size : {2, 3, 4}) {
+        double remain_turn = obj_turn - comb_size * 4.0 - 3.0;
+        if(remain_turn < 0.0) {
+            continue; // 目標ターン数を超える場合はスキップ
+        }
+        auto results = mixer.solve_nnls(target, comb_size, SEARCH_NUM);
+        for(auto &result : results) {
+            int max_double_frac_num = (int)(remain_turn / 4.0); // 分数2回適応できる数
+            max_double_frac_num = min(max_double_frac_num, comb_size);
+            vector<int> max_frac_cnt(comb_size, 1);
+            if(max_double_frac_num > 0) {
+                for(int i : range(max_double_frac_num)) {
+                    max_frac_cnt[comb_size - i - 1] = 2;
+                }
+            }
+            do {
+                auto [now_info, now_cost] = per_result.eval_one_result(result, max_frac_cnt);
+                if(now_cost < best_cost) {
+                    best_cost = now_cost;
+                    best_info = now_info;
+                }
+            } while(next_permutation(ALL(max_frac_cnt)));
+        }
+    }
+
+    assert((int)best_info.size() != 0);
+
+    auto action_result = construct_from_immediateinfo(best_info, group_info);
+    return action_result;
+}
+
+void discard_mix_well(State &state, Input &input) {
+    while(state.get_paint(input.N - 1, 0).vol > 1e-6) {
+        state.apply(Action::Discard(input.N - 1, 0));
+    }
+}
+
+void print_info(State &state) {
+    auto [deliver_cost, err_cost, total_cost] = state.get_score();
+    cerr << boost::format("H: %4d | Turn: %5d/%5d | Add: %4d | Discard: %4d (%5d loss) | Score: %5d (add: %5d, err: %5d)") % state.deliver_cnt % state.turn %
+                state.input.T % state.add_cnt % state.discard_cnt % int(state.discard * 1e4) % total_cost % deliver_cost % err_cost
+         << endl;
+}
+
+void solve() {
+    TimeKeeper time_keeper(MAX_TIME);
+
+    Input input = parse_input();
+    ManageGroupInfo manage_group_info(input.N, input.K, input.K, INIT_PARTITION_POS);
+
+    set<int> unique_denoms;
+    for(int k : range(input.K)) {
+        unique_denoms.insert(manage_group_info.get_size(k));
+    }
+    vector<int> denoms(ALL(unique_denoms));
+
+    FractorManager fractor_manager(denoms);
+    auto init_wall = manage_group_info.struct_init_wall(input);
+    State state(init_wall, input);
+    ColorMixer mixer(input.own);
+
+    // Main Loop
+    int policy_greedy_cnt = 0;
+    double policy_err_sum = 0.0;
+    map<int, int> act_cnt;
+    map<int, int> color_cnt;
+
+    try {
+        // !DEBUG
+        for(int h : range(input.H)) {
+            if(h % 10 == 0) print_info(state);
+            // print_info(state);
+
+            int remain_turn = input.T - state.turn - BUFFER_TURN;
+            double obj_turn = (double)remain_turn / (double)(input.H - state.deliver_cnt);
+
+            if(obj_turn >= SWITH_POLICY_OBJ_TURN) {
+                auto action_result = dicision_action(input, state, mixer, obj_turn, manage_group_info, fractor_manager);
+
+                act_cnt[action_result.change_color_num] += action_result.act_cnt;
+                color_cnt[action_result.change_color_num]++;
+
+                for(const auto &act : action_result.pre_actions) {
+                    state.apply(act);
+                }
+                for(const auto &act : action_result.release_actions) {
+                    state.apply(act);
+                }
+                state.apply(Action::Deliver(input.N - 1, 0));
+                discard_mix_well(state, input);
+                for(const auto &act : action_result.post_actions) {
+                    state.apply(act);
+                }
+
+            } else {
+                auto pre_err = state.error;
+                PolicyGreedy(input, state, manage_group_info);
+                auto post_err = state.error;
+                policy_err_sum += post_err - pre_err;
+                policy_greedy_cnt++;
+            }
+        }
+        print_info(state);
+    } catch(const exception &e) {
+        Output output = Output{init_wall, state.actions};
+        print_output(output);
+        cerr << "Exception: " << e.what() << endl;
+        exit(1);
+    }
+
+    // 情報
+    if(policy_greedy_cnt > 0) {
+        cerr << boost::format("PolicyGreedy %d times. Error %d") % policy_greedy_cnt % (policy_err_sum * 1e4) << endl;
+    }
+    for(const auto &p : act_cnt) {
+        int color_num = p.first;
+        int call = color_cnt[color_num];
+        int total = p.second;
+        double avg = (double)total / (double)call;
+        cerr << boost::format("color num: %d, call: %d, total: %d, avg: %f") % color_num % call % total % avg << endl;
+    }
+    cerr << boost::format("score: %d, elapsed: %f, turn: %d/%d") % get<2>(state.get_score()) % time_keeper.getElapsedTime() % state.turn % input.T << endl;
+
+    // output
+    Output output = Output{init_wall, state.actions};
+    print_output(output);
+}
+
+int main() {
+    solve();
+    return 0;
+}
