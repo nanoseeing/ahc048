@@ -17,9 +17,9 @@ const int INIT_PARTITION_POS = 1; // パーティション初期値
 
 long long MAX_SIMULATE_CNT = 1e7; // 分数パターンの最大数（目安）
 
-const int BUFFER_TURN = 30; // 30ターンは余裕を持たせる
+const int BUFFER_TURN = 5; // 念のためバッファを持たせる
 
-const double SWITH_POLICY_OBJ_TURN = 9.0;
+const double SWITH_POLICY_OBJ_TURN = 11.0;
 
 const int SEARCH_NUM = 5;
 
@@ -309,38 +309,78 @@ class FractorManager {
     }
 };
 
-void PolicyGreedy(Input &input, State &state, ManageGroupInfo &group_info) {
-    auto target_color = input.target[state.deliver_cnt];
+class PolicyGreedy {
+  public:
+    Input &input;
+    State &state;
+    vector<Color> mix_cache;
+    // unordered_map<int, vector<Color>> mix_cache;
+    // unordered_map<int, vector<vector<int>>> mix_cache_inds;
 
-    double min_cost = 1e9;
-    int min_k = -1;
-    bool is_add = false;
-    for(int k : range(state.input.K)) {
-        Paint paint = group_info.get_paint(k, state);
-        double now_cost = eval_error(input.own[k], target_color) * 1e4;
-        bool now_is_add = (paint.vol < 1.0 - 1e-6) ? true : false; // 1g未満なら追加が必要
-        if(now_is_add) now_cost += state.input.D;
-        if(now_cost < min_cost) {
-            min_cost = now_cost;
-            min_k = k;
-            is_add = now_is_add;
+    PolicyGreedy(Input &input, State &state) : input(input), state(state) {
+        construct();
+    }
+
+    void construct() {
+        mix_cache.resize(1 << input.K);
+        for(int i : range(1, 1 << input.K)) {
+            vector<Color> colors;
+            vector<double> vols;
+
+            for(int k : range(input.K)) {
+                if((i >> k) & 1) {
+                    colors.push_back(input.own[k]);
+                    vols.push_back(1.0);
+                }
+            }
+
+            Color mixed_color = mix(vols, colors);
+            mix_cache[i] = mixed_color;
         }
     }
 
-    if(is_add) {
-        int now_pos = group_info.get_now_pos(min_k);
-        if(now_pos == 1) {
-            // 仕切りが1しかない場合は、仕切りを追加する
-            const int POS = 2;
-            state.apply(group_info.get_toggle_action(min_k, POS));
-            state.apply(group_info.get_toggle_action(min_k, now_pos));
-            group_info.change_now_pos(min_k, POS);
-        }
-        state.apply(group_info.get_add_paint_action(min_k));
-    }
+    void solve(double obj_turn) {
+        auto target_color = input.target[state.deliver_cnt];
+        int can_mixed_num = min(max(1, int(obj_turn / 2.0)), input.K);
 
-    state.apply(group_info.get_deliver_paint_action(min_k));
-}
+        double min_cost = 1e9;
+        int min_ind = -1;
+        std::vector<int> indices(input.K, 0);
+        for(int mixed_size = 0; mixed_size <= can_mixed_num; ++mixed_size) {
+            std::fill(indices.begin(), indices.end(), 0);
+            std::fill(indices.begin(), indices.begin() + mixed_size, 1);
+            do {
+                int x = 0;
+                for(int i = 0; i < input.K; ++i) {
+                    if(indices[i]) x |= (1 << i);
+                }
+                if(x == 0) continue; // 少なくとも1色は選ぶ必要がある
+                auto &mixed_color = mix_cache[x];
+                double cost = eval_error(mixed_color, target_color) * 1e4 + (double)(input.D) * (mixed_size - 1.0);
+                if(cost < min_cost) {
+                    min_cost = cost;
+                    min_ind = x;
+                }
+            } while(std::prev_permutation(indices.begin(), indices.end()));
+        }
+
+        vector<int> target_inds;
+        for(int k = 0; k < input.K; ++k) {
+            if((min_ind >> k) & 1) {
+                target_inds.push_back(k);
+            }
+        }
+
+        int mixed_size = (int)target_inds.size();
+        for(const auto &k : target_inds) {
+            state.apply(Action::Add(input.N - 1, 0, k));
+        }
+        state.apply(Action::Deliver(input.N - 1, 0));
+        for(int i : range(mixed_size - 1)) {
+            state.apply(Action::Discard(input.N - 1, 0));
+        }
+    }
+};
 
 struct ImmediateInfo {
     int k;
@@ -553,7 +593,7 @@ DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, do
     double best_cost = 1e9;
     vector<ImmediateInfo> best_info;
     for(int comb_size : {2, 3, 4}) {
-        double remain_turn = obj_turn - comb_size * 4.0 - 1.0;
+        double remain_turn = obj_turn - comb_size * 4.0 - 3.0;
         if(remain_turn < 0.0) {
             continue; // 目標ターン数を超える場合はスキップ
         }
@@ -613,6 +653,8 @@ void solve() {
     State state(init_wall, input);
     ColorMixer mixer(input.own);
 
+    PolicyGreedy policy_greedy(input, state);
+
     // Main Loop
     int policy_greedy_cnt = 0;
     double policy_err_sum = 0.0;
@@ -641,6 +683,9 @@ void solve() {
                     state.apply(act);
                 }
                 state.apply(Action::Deliver(input.N - 1, 0));
+                if(h == input.H - 1) {
+                    break;
+                }
                 discard_mix_well(state, input);
                 for(const auto &act : action_result.post_actions) {
                     state.apply(act);
@@ -648,7 +693,7 @@ void solve() {
 
             } else {
                 auto pre_err = state.error;
-                PolicyGreedy(input, state, manage_group_info);
+                policy_greedy.solve(obj_turn);
                 auto post_err = state.error;
                 policy_err_sum += post_err - pre_err;
                 policy_greedy_cnt++;
