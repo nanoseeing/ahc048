@@ -68,41 +68,94 @@ vector<vector<int>> construct_subsets(int size, int k) {
 class ColorMixer {
   public:
     struct Result {
-        double err;
+        double cost;
         vector<int> indices;
         vector<double> weights;
 
         bool operator<(Result const& o) const {
-            return err < o.err;
+            return cost < o.cost;
         }
-    };
-    struct SubsetInfo {
-        int size;
-        vector<int> indices;
     };
 
     Input& input;
-    unordered_map<pair<int, int>, vector<Result>> results_cache; // key:(h, comb_size), value: Result
+    unordered_map<pair<int, int>, vector<Result>> results_fract_cache; // key:(h, comb_size), value: Result
+    unordered_map<pair<int, int>, Result> results_greedy_cache;        // key:(h, comb_size), value: Result
 
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 30;
+    const int FIND_TOP_N = 100;
     const int SUBSET_NUM_THRESHOLD = 500; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
 
+    const int GREEDY_COLOR_MIN = 1; // greedyで混合する最小色数
+    const int GREEDY_COLOR_MAX = 5; // greedyで混合する最大色数
+    const int FRAC_COLOR_MIN = 2;   // 分数混合で混合する最小色数
+    const int FRAC_COLOR_MAX = 4;   // 分数混合で混合する最大色数
+
     ColorMixer(Input& input_) : input(input_) {
-        construct();
+        construct_fract_policy();
+        construct_greedy_policy();
     }
 
-    vector<Result> get_results(int h, int comb_size) {
+    vector<Result> get_fract_results(int h, int comb_size) {
         assert(0 <= h && h < input.H);
-        assert(2 <= comb_size && comb_size <= 4);
+        assert(FRAC_COLOR_MIN <= comb_size && comb_size <= FRAC_COLOR_MAX);
         pair<int, int> key = {h, comb_size};
-        return results_cache[key];
+        return results_fract_cache[key];
     }
 
-    void construct() {
-        const int FIND_TOP_N = 100;
+    Result get_greedy_result(int h, int comb_size) {
+        assert(0 <= h && h < input.H);
+        assert(GREEDY_COLOR_MIN <= comb_size && comb_size <= GREEDY_COLOR_MAX);
+        pair<int, int> key = {h, comb_size};
+        return results_greedy_cache[key];
+    }
 
-        for(int comb_size = 2; comb_size <= 4; ++comb_size) {
+    void construct_greedy_policy() {
+        for(int comb_size = GREEDY_COLOR_MIN; comb_size <= GREEDY_COLOR_MAX; ++comb_size) {
+            for(int h = 0; h < input.H; ++h) {
+                Result tmp_result;
+                tmp_result.cost = 1e18;
+                results_greedy_cache[{h, comb_size}] = tmp_result;
+            }
+            auto subsets = construct_subsets(comb_size, input.K);
+            for(const auto& subset : subsets) {
+                vector<int> indices;
+                for(int i : subset) {
+                    indices.push_back(i);
+                }
+                vector<Color> colors;
+                vector<double> vols;
+                for(const int i : subset) {
+                    colors.push_back(input.own[i]);
+                    vols.push_back(1.0);
+                }
+                Color mixed_color = mix(vols, colors);
+                for(int h = 0; h < input.H; ++h) {
+                    Color& target_color = input.target[h];
+                    double err = eval_error(mixed_color, target_color);
+                    double cost = err * 1e4 + (double)(input.D) * (double)(comb_size - 1);
+                    if(cost < results_greedy_cache[{h, comb_size}].cost) {
+                        Result r = {cost, indices, vector<double>(comb_size, 1.0)};
+                        results_greedy_cache[{h, comb_size}] = move(r);
+                    }
+                }
+            }
+        }
+
+        // 少ないターン数でエラーが小さければ採用する
+        for(int h = 0; h < input.H; ++h) {
+            for(int comb_size = GREEDY_COLOR_MIN + 1; comb_size <= GREEDY_COLOR_MAX; ++comb_size) {
+                auto& pre_result = results_greedy_cache[{h, comb_size - 1}];
+                auto& now_result = results_greedy_cache[{h, comb_size}];
+                if(pre_result.cost < now_result.cost) {
+                    results_greedy_cache[{h, comb_size}] = pre_result;
+                }
+            }
+        }
+    }
+
+    void construct_fract_policy() {
+        for(int comb_size = FRAC_COLOR_MIN; comb_size <= FRAC_COLOR_MAX; ++comb_size) {
             auto subsets = construct_subsets(comb_size, input.K);
             if((int)subsets.size() > SUBSET_NUM_THRESHOLD) {
                 shuffle(subsets.begin(), subsets.end(), engine);
@@ -112,42 +165,42 @@ class ColorMixer {
                 Color& t = input.target[h];
                 vector<Result> results;
 
-                if(comb_size == 4) {
+                if(comb_size == FRAC_COLOR_MAX) {
                     // NNLSを解けば基本的に4色だけ残るはず。
                     vector<int> indices;
                     for(int i = 0; i < this->input.K; ++i) {
                         indices.push_back(i);
                     }
-                    Result r = nnls(t, indices, EPS, MAX_ITER);
+                    auto [true_err, weights] = nnls(t, indices, EPS, MAX_ITER);
 
                     vector<int> inds4;
                     vector<double> weights4;
                     for(int i = 0; i < this->input.K; ++i) {
-                        if(r.weights[i] > EPS) {
+                        if(weights[i] > EPS) {
                             inds4.push_back(i);
-                            weights4.push_back(r.weights[i]);
+                            weights4.push_back(weights[i]);
                         }
                     }
                     assert((int)inds4.size() <= 4);
 
-                    // 一応計算Errorは計算しなおさないといけないが、ほぼ誤差の範囲のはず
-                    Result new_r = Result{r.err, move(inds4), move(weights4)};
+                    // info: Errorは計算し直さなくて良いはず。また、weightsは0なので、addコストはない
+                    Result new_r = Result{true_err * 1e4, move(inds4), move(weights4)};
                     results.emplace_back(move(new_r));
                 }
 
                 // 2, 3色のNNLSを解く
                 for(auto& indices : subsets) {
-                    Result r = nnls(t, indices, EPS, MAX_ITER);
-                    results.emplace_back(move(r));
+                    auto [true_err, weights] = nnls(t, indices, EPS, MAX_ITER);
+                    results.emplace_back(Result{true_err * 1e4, indices, weights});
                 }
-                sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
+                sort(ALL(results), [&](auto& a, auto& b) { return a.cost < b.cost; });
                 results.resize(min(FIND_TOP_N, (int)results.size()));
-                results_cache[{h, comb_size}] = move(results);
+                results_fract_cache[{h, comb_size}] = move(results);
             }
         }
     }
 
-    Result nnls(Color& target, vector<int>& indices, double tol, double iter) {
+    tuple<double, vector<double>> nnls(Color& target, vector<int>& indices, double tol, double iter) {
         const int N = indices.size();
 
         Eigen::MatrixXd A_ext;
@@ -182,7 +235,7 @@ class ColorMixer {
         }
 
         double true_err = calc_true_error(weights, indices, target);
-        return Result{true_err, indices, weights};
+        return {true_err, weights};
     }
 
     double calc_true_error(vector<double>& weights, vector<int>& indices, Color& target) {

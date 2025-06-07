@@ -268,12 +268,12 @@ vector<vector<int>> construct_subsets(int size, int k) {
 class ColorMixer {
   public:
     struct Result {
-        double err;
+        double cost;
         vector<int> indices;
         vector<double> weights;
 
         bool operator<(Result const& o) const {
-            return err < o.err;
+            return cost < o.cost;
         }
     };
 
@@ -306,7 +306,7 @@ class ColorMixer {
             Result r = solve_nnls_inv(t, indices);
             if((int)heap.size() < TEMP_HEAP_SIZE) {
                 heap.push(r);
-            } else if(r.err < heap.top().err) {
+            } else if(r.cost < heap.top().cost) {
                 heap.pop();
                 heap.push(r);
             }
@@ -335,7 +335,7 @@ class ColorMixer {
             // }
         }
 
-        sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.err < b.err; });
+        sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.cost < b.cost; });
 
         vector<Result> top_results;
         for(int i = 0; i < min(find_top_n, (int)results.size()); ++i) {
@@ -574,7 +574,7 @@ void main() {
             auto results = mixer.solve_nnls(t, k, SEARCH_SIZE);
             auto best_ret = results[0];
             double w_sum = accumulate(ALL(best_ret.weights), 0.0);
-            double e = best_ret.err * 1e4;
+            double e = best_ret.cost * 1e4;
             errs.push_back(e);
         }
         cerr << h << " " << errs[0] << endl;

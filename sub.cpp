@@ -914,12 +914,12 @@ vector<vector<int>> construct_subsets(int size, int k) {
 class ColorMixer {
   public:
     struct Result {
-        double err;
+        double cost;
         vector<int> indices;
         vector<double> weights;
 
         bool operator<(Result const &o) const {
-            return err < o.err;
+            return cost < o.cost;
         }
     };
 
@@ -1026,7 +1026,7 @@ class ColorMixer {
             assert((int)inds4.size() <= 4);
 
             // 一応計算Errorは計算しなおさないといけないが、ほぼ誤差の範囲のはず
-            Result new_r = Result{r.err, move(inds4), move(weights4)};
+            Result new_r = Result{r.cost, move(inds4), move(weights4)};
             results.emplace_back(move(new_r));
         }
 
@@ -1041,7 +1041,7 @@ class ColorMixer {
             Result r = nnls(t, indices, EPS, MAX_ITER);
             results.emplace_back(move(r));
         }
-        sort(ALL(results), [&](auto &a, auto &b) { return a.err < b.err; });
+        sort(ALL(results), [&](auto &a, auto &b) { return a.cost < b.cost; });
         results.resize(min(find_top_n, (int)results.size()));
         return results;
     }

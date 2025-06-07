@@ -194,12 +194,12 @@ vector<vector<double>> invG;
 class ColorMixer {
   public:
     struct Result {
-        double err;
+        double cost;
         vector<int> indices;
         vector<double> weights;
 
         bool operator<(Result const& o) const {
-            return err < o.err;
+            return cost < o.cost;
         }
     };
 
@@ -261,15 +261,15 @@ class ColorMixer {
             Result r = solve_nnls_pdm(indices, t, true, EPS, MAX_ITER);
             results.emplace_back(move(r));
         }
-        sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.err < b.err; });
+        sort(results.begin(), results.end(), [](const Result& a, const Result& b) { return a.cost < b.cost; });
         results.resize(min(find_top_n, (int)results.size()));
 
         const int MAX_HEAVY_NNLS = 10;
         for(int i : range(min((int)results.size(), MAX_HEAVY_NNLS))) {
             auto& r = results[i];
-            if(r.err < 1e-4) continue;
+            if(r.cost < 1e-4) continue;
             Result r3 = solve_nnls_pdm(r.indices, t, false, EPS, MAX_ITER_HEAVY);
-            if(r3.err < r.err) {
+            if(r3.cost < r.cost) {
                 results[i] = r3;
             }
         }
