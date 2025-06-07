@@ -8,6 +8,7 @@
 // 定義
 // ============================================================================
 
+const double PARTITION_SWITCH_TURN = 4.0;
 const double MAX_TIME = 2800.0;
 const int INIT_PARTITION_POS = 0; // パーティション初期値
 long long MAX_SIMULATE_CNT = 2e7; // 分数パターンの最大数（目安）
@@ -21,7 +22,7 @@ const int MAX_SEARCH_NUM = 28;
 // ============================================================================
 
 int calc_pred_fractor_turn(int comb_size) {
-    return comb_size * 4 + 3; // 追加,配達,削除
+    return comb_size * PARTITION_SWITCH_TURN + 3; // 追加,配達,削除
 }
 
 int calc_pred_greedy_turn(int comb_size) {
@@ -354,7 +355,7 @@ class Planner {
         for(int h : range(input.H)) {
             vector<TmpResult> tmp_results;
             // PolicyGreedy
-            for(int comb_size : range(1, min(5, input.K) + 1)) {
+            for(int comb_size : range(ColorMixer::GREEDY_COLOR_MIN, min(ColorMixer::GREEDY_COLOR_MAX, input.K) + 1)) {
                 auto r = mixer.get_greedy_result(h, comb_size);
                 TmpResult tmp_result{.cost = r.cost,
                                      .pred_turn = calc_pred_greedy_turn(comb_size),
@@ -365,7 +366,7 @@ class Planner {
                 tmp_results.push_back(tmp_result);
             }
             // PolicyFractor
-            for(int comb_size : range(2, 5)) {
+            for(int comb_size : range(ColorMixer::FRAC_COLOR_MIN, ColorMixer::FRAC_COLOR_MAX + 1)) {
                 auto results = mixer.get_fract_results(h, comb_size);
                 auto r = results[0]; // 先頭がBest
                 TmpResult tmp_result{.cost = r.cost,
@@ -695,8 +696,8 @@ class PolicyFractor {
         for(int i : range(min((int)results.size(), MAX_SEARCH_NUM))) {
             auto &result = results[i];
             vector<int> max_frac_cnt(policy_item.comb_size, 1);
-            if(policy_item.comb_size == 4) {
-                int max_double_frac_num = min(policy_item.comb_size, (int)(remain_turn / 4.0));
+            if(policy_item.comb_size == ColorMixer::FRAC_COLOR_MAX) {
+                int max_double_frac_num = min(policy_item.comb_size, (int)(remain_turn / PARTITION_SWITCH_TURN));
                 if(max_double_frac_num > 0) {
                     for(int j : range(max_double_frac_num)) {
                         max_frac_cnt[policy_item.comb_size - j - 1] = 2;
@@ -729,7 +730,7 @@ class PolicyFractor {
             int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
             for(auto &result : results) {
                 vector<int> max_frac_cnt(comb_size, 1);
-                int max_double_frac_num = min(comb_size, (int)(remain_turn / 4.0));
+                int max_double_frac_num = min(comb_size, (int)(remain_turn / PARTITION_SWITCH_TURN));
                 if(max_double_frac_num > 0) {
                     for(int i : range(max_double_frac_num)) {
                         max_frac_cnt[comb_size - i - 1] = 2;
@@ -756,7 +757,7 @@ class PolicyFractor {
             int comb_size = (int)upper_vols_result.indices.size();
             int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
             if(remain_turn >= 0) {
-                int max_double_frac_num = min(comb_size, (int)(remain_turn / 4.0));
+                int max_double_frac_num = min(comb_size, (int)(remain_turn / PARTITION_SWITCH_TURN));
                 auto [now_cost, now_info] = helper_turn(upper_vols_result, max_double_frac_num);
                 if(now_cost < best_cost) {
                     // cerr << "!!upper_vols_update" << endl;
@@ -782,7 +783,7 @@ class PolicyFractor {
         for(int k : range(input.K)) {
             total_board_vol += color_group_manager.get_paint(k, state).vol;
         }
-        if(remain_vol >= total_board_vol + 4.0) {
+        if(remain_vol >= total_board_vol + PARTITION_SWITCH_TURN) {
             // まだ余裕があるなら、通常ターン
             auto [best_cost, best_info] = this->ordinaly_turn(policy_item);
             auto action_result = construct_from_immediateinfo(best_info);

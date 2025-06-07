@@ -84,13 +84,12 @@ class ColorMixer {
 
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 30;
-    const int FIND_TOP_N = 100;
-    const int SUBSET_NUM_THRESHOLD = 400; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
-
-    const int GREEDY_COLOR_MIN = 1; // greedyで混合する最小色数
-    const int GREEDY_COLOR_MAX = 5; // greedyで混合する最大色数
-    const int FRAC_COLOR_MIN = 2;   // 分数混合で混合する最小色数
-    const int FRAC_COLOR_MAX = 4;   // 分数混合で混合する最大色数
+    static const int FIND_TOP_N = 100;
+    static const int SUBSET_NUM_THRESHOLD = 400; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
+    static const int GREEDY_COLOR_MIN = 1;       // greedyで混合する最小色数
+    static const int GREEDY_COLOR_MAX = 5;       // greedyで混合する最大色数
+    static const int FRAC_COLOR_MIN = 2;         // 分数混合で混合する最小色数
+    static const int FRAC_COLOR_MAX = 4;         // 分数混合で混合する最大色数
 
     ColorMixer(Input& input_) : input(input_) {
         construct_fract_policy();
