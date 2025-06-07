@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "blvs.hpp"
 #include "common.hpp"
 #include "ex/nnls.hpp"
 #include "game.hpp"
@@ -101,6 +102,62 @@ class ColorMixer {
         assert(FRAC_COLOR_MIN <= comb_size && comb_size <= FRAC_COLOR_MAX);
         pair<int, int> key = {h, comb_size};
         return results_fract_cache[key];
+    }
+
+    Result get_fract_result_with_upper_vols(int h, vector<double>& upper_vols) {
+        Eigen::MatrixXd A_ext;
+        A_ext.resize(3, input.K);
+        for(int k = 0; k < input.K; ++k) {
+            auto col = input.own[k];
+            Eigen::Vector3d c(col[0], col[1], col[2]);
+            A_ext.block<3, 1>(0, k) = c;
+        }
+
+        Eigen::Vector3d t_ext;
+        t_ext(0) = input.target[h][0];
+        t_ext(1) = input.target[h][1];
+        t_ext(2) = input.target[h][2];
+
+        Eigen::VectorXd u;
+        u.resize(input.K);
+        for(int i = 0; i < input.K; ++i) {
+            u(i) = upper_vols[i];
+        }
+
+        BVLS_BoxSum solver(A_ext, t_ext, u);
+        Eigen::VectorXd x = solver.solve();
+        double sum_w = x.sum();
+
+        // assert(abs(sum_w - 1.0) < 1e-6); // 合計1制約
+        // for(int i = 0; i < input.K; ++i) {
+        //     assert(x(i) >= 0.0);  // 非負制約
+        //     assert(x(i) <= u(i)); // 上限制約
+        // }
+
+        vector<int> result_indices;
+        vector<double> weights;
+        if(sum_w < 1e-6) {
+            for(int i = 0; i < input.K; ++i) {
+                weights.push_back(1.0 / input.K);
+                result_indices.push_back(i);
+            }
+        } else {
+            for(int i = 0; i < input.K; ++i) {
+                if(x(i) > 1e-6) {
+                    result_indices.push_back(i);
+                    weights.push_back(x(i));
+                }
+            }
+        }
+        double tmp_sum_w = accumulate(weights.begin(), weights.end(), 0.0);
+        for(int i : range(weights.size())) {
+            weights[i] /= tmp_sum_w; // 正規化
+        }
+        double sum_new_w = accumulate(weights.begin(), weights.end(), 0.0);
+        assert(abs(sum_new_w - 1.0) < 1e-6);
+
+        double true_err = calc_true_error(weights, result_indices, input.target[h]);
+        return Result{true_err * 1e4, move(result_indices), move(weights)};
     }
 
     Result get_greedy_result(int h, int comb_size) {

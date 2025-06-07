@@ -14,8 +14,7 @@ long long MAX_SIMULATE_CNT = 2e7; // 分数パターンの最大数（目安）
 const int BUFFER_TURN = 10;       // 念のためバッファを持たせる
 const int SEARCH_LEFT = -1;       // 直積の左側を探索
 const int SEARCH_RIGHT = 1;       // 直積の右側を探索
-const int MAX_SEARCH_NUM = 25;
-// const int MIN_SEARCH_NUM = 15;
+const int MAX_SEARCH_NUM = 28;
 
 // ============================================================================
 // Main
@@ -659,28 +658,48 @@ class PolicyFractor {
         return action_result;
     }
 
-    DicisionAction dicision_action(Planner::PolicyItem &policy_item) {
-        // TODO 時間に応じてMAX_SEARCH_NUMを調整したい
-        // if(this->start_time == 0.0) {
-        //     this->start_time = this->time_keeper.getElapsedTime();
-        // }
-        // double elapsed_time = this->time_keeper.getElapsedTime() - this->start_time;
+    pair<double, vector<ImmediateInfo>> helper_turn(ColorMixer::Result &result, int max_double_frac_num) {
+        double best_cost = 1e9;
+        vector<ImmediateInfo> best_info;
+
+        int comb_size = result.indices.size();
+        vector<int> max_frac_cnt(comb_size, 1);
+        if(max_double_frac_num > 0) {
+            for(int j : range(min(max_double_frac_num, comb_size))) {
+                max_frac_cnt[comb_size - j - 1] = 2;
+            }
+        }
+        do {
+            auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt);
+            if(now_cost < best_cost) {
+                best_cost = now_cost;
+                best_info = now_info;
+            }
+        } while(next_permutation(ALL(max_frac_cnt)));
+
+        assert((int)best_info.size() != 0);
+        return {best_cost, best_info};
+    }
+
+    pair<double, vector<ImmediateInfo>> ordinaly_turn(Planner::PolicyItem &policy_item) {
+        // =====================================================================
+        // 通常ターンはPolicyにしたがって行動を決定する
+        // =====================================================================
 
         double best_cost = 1e9;
         vector<ImmediateInfo> best_info;
+
         auto results = mixer.get_fract_results(state.deliver_cnt, policy_item.comb_size);
         int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(policy_item.comb_size);
-        // assert(remain_turn >= 0); // Addが多いと残りターンがマイナスになる可能性がある
 
         for(int i : range(min((int)results.size(), MAX_SEARCH_NUM))) {
             auto &result = results[i];
             vector<int> max_frac_cnt(policy_item.comb_size, 1);
             if(policy_item.comb_size == 4) {
-                // 4色配合の場合、分数を2回適応できる可能性がある
-                int max_double_frac_num = min(4, (int)(remain_turn / 4.0));
+                int max_double_frac_num = min(policy_item.comb_size, (int)(remain_turn / 4.0));
                 if(max_double_frac_num > 0) {
-                    for(int i : range(max_double_frac_num)) {
-                        max_frac_cnt[policy_item.comb_size - i - 1] = 2;
+                    for(int j : range(max_double_frac_num)) {
+                        max_frac_cnt[policy_item.comb_size - j - 1] = 2;
                     }
                 }
             }
@@ -694,10 +713,88 @@ class PolicyFractor {
         }
 
         assert((int)best_info.size() != 0);
+        return {best_cost, best_info};
+    }
 
-        auto action_result = construct_from_immediateinfo(best_info);
-        action_result.cost = best_cost;
-        return action_result;
+    pair<double, vector<ImmediateInfo>> nealy_final_turn(Planner::PolicyItem &policy_item) {
+        // =====================================================================
+        // 最後の方は全パターン試す
+        // =====================================================================
+
+        double best_cost = 1e9;
+        vector<ImmediateInfo> best_info;
+
+        for(int comb_size : range(2, policy_item.comb_size + 1)) {
+            auto results = mixer.get_fract_results(state.deliver_cnt, comb_size);
+            int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
+            for(auto &result : results) {
+                vector<int> max_frac_cnt(comb_size, 1);
+                int max_double_frac_num = min(comb_size, (int)(remain_turn / 4.0));
+                if(max_double_frac_num > 0) {
+                    for(int i : range(max_double_frac_num)) {
+                        max_frac_cnt[comb_size - i - 1] = 2;
+                    }
+                }
+                do {
+                    auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt);
+                    if(now_cost < best_cost) {
+                        best_cost = now_cost;
+                        best_info = now_info;
+                    }
+                } while(next_permutation(ALL(max_frac_cnt)));
+            }
+        }
+
+        // 不等式制約つきで問題を解いてみる
+        vector<double> upper_vols;
+        for(int k : range(input.K)) {
+            upper_vols.push_back(color_group_manager.get_paint(k, state).vol);
+        }
+        double sum_vol = accumulate(ALL(upper_vols), 0.0);
+        if(sum_vol > 1.0) {
+            auto upper_vols_result = mixer.get_fract_result_with_upper_vols(state.deliver_cnt, upper_vols);
+            int comb_size = (int)upper_vols_result.indices.size();
+            int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
+            if(remain_turn >= 0) {
+                int max_double_frac_num = min(comb_size, (int)(remain_turn / 4.0));
+                auto [now_cost, now_info] = helper_turn(upper_vols_result, max_double_frac_num);
+                if(now_cost < best_cost) {
+                    // cerr << "!!upper_vols_update" << endl;
+                    best_cost = now_cost;
+                    best_info = now_info;
+                }
+            }
+        }
+
+        assert((int)best_info.size() != 0);
+        return {best_cost, best_info};
+    }
+
+    DicisionAction dicision_action(Planner::PolicyItem &policy_item) {
+        // TODO 時間に応じてMAX_SEARCH_NUMを調整したい
+        // if(this->start_time == 0.0) {
+        //     this->start_time = this->time_keeper.getElapsedTime();
+        // }
+        // double elapsed_time = this->time_keeper.getElapsedTime() - this->start_time;
+
+        double remain_vol = input.H - state.deliver_cnt;
+        double total_board_vol = 0.0;
+        for(int k : range(input.K)) {
+            total_board_vol += color_group_manager.get_paint(k, state).vol;
+        }
+        if(remain_vol >= total_board_vol + 4.0) {
+            // まだ余裕があるなら、通常ターン
+            auto [best_cost, best_info] = this->ordinaly_turn(policy_item);
+            auto action_result = construct_from_immediateinfo(best_info);
+            action_result.cost = best_cost;
+            return action_result;
+        } else {
+            // 最後の方は全パターン試す
+            auto [best_cost, best_info] = this->nealy_final_turn(policy_item);
+            auto action_result = construct_from_immediateinfo(best_info);
+            action_result.cost = best_cost;
+            return action_result;
+        }
     }
 };
 class PolicyGreedy {
@@ -777,7 +874,7 @@ void solve() {
     try {
         // Main Loop
         for(int h : range(input.H)) {
-            if(h % 10 == 0) print_info(state);
+            if(h % 10 == 0 || h >= 990) print_info(state);
             auto policy = planner.get_policy(h);
 
             DicisionAction best_act;

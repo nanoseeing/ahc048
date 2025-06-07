@@ -1,6 +1,110 @@
 
 
 
+#include <Eigen/Core>
+#include <Eigen/LU>
+#include <Eigen/QR>
+#include <limits>
+#include <vector>
+
+class BVLS_BoxSum {
+  public:
+    using Matrix = Eigen::MatrixXd;
+    using Vector = Eigen::VectorXd;
+    using Index = Eigen::Index;
+
+    BVLS_BoxSum(const Matrix& A, const Vector& b, const Vector& u) : A_(A), b_(b), u_(u), m_(A.rows()), n_(A.cols()) {
+        assert(u_.size() == n_);
+    }
+
+    Vector solve() {
+        Vector v = Vector::Zero(n_);
+        std::vector<int> state(n_, 0);
+        //  state[i]==0: 自由 (F)
+        //            1: 下限 0 固定 (Z)
+        //            2: 上限 u_i 固定 (U)
+        // 初期: 全部自由にして、最後に projectToSum1 しても OK
+        v.setConstant(1.0 / n_);
+        projectSum1(v);
+
+        bool changed = true;
+        while(changed) {
+            changed = false;
+            // 集合 F, Z, U を収集
+            std::vector<Index> F;
+            Vector b_eff = b_;
+            for(Index i = 0; i < n_; ++i) {
+                if(state[i] == 0)
+                    F.push_back(i);
+                else if(state[i] == 2)
+                    b_eff -= A_.col(i) * u_[i];
+            }
+
+            // KKT 行列を組む
+            Index p = (Index)F.size();
+            Eigen::MatrixXd H(p + 1, p + 1);
+            Eigen::VectorXd rhs(p + 1);
+            // H = [A_F^T A_F   1; 1^T 0], rhs = [A_F^T b_eff; 1 - sum_U u]
+            Eigen::MatrixXd AF(m_, p);
+            for(Index j = 0; j < p; ++j)
+                AF.col(j) = A_.col(F[j]);
+            Eigen::MatrixXd G = AF.transpose() * AF;
+            H.topLeftCorner(p, p) = G;
+            H.block(0, p, p, 1).setOnes();
+            H.block(p, 0, 1, p).setOnes();
+            H(p, p) = 0;
+
+            Eigen::VectorXd g = AF.transpose() * b_eff;
+            rhs.head(p) = g;
+            double sumU = 0;
+            for(Index i = 0; i < n_; ++i)
+                if(state[i] == 2) sumU += u_[i];
+            rhs[p] = 1.0 - sumU;
+
+            // KKT 系を解く
+            Eigen::VectorXd sol = H.fullPivLu().solve(rhs);
+            Vector vF = sol.head(p);
+
+            // 違反チェック
+            for(Index j = 0; j < p; ++j) {
+                Index i = F[j];
+                if(vF[j] < 0) {
+                    state[i] = 1;
+                    changed = true;
+                } else if(vF[j] > u_[i]) {
+                    state[i] = 2;
+                    changed = true;
+                }
+            }
+            // 違反がなければ自由変数を更新
+            if(!changed) {
+                for(Index j = 0; j < p; ++j)
+                    v[F[j]] = vF[j];
+            }
+        } // while
+
+        // 最後に固定組を代入
+        for(Index i = 0; i < n_; ++i) {
+            if(state[i] == 1)
+                v[i] = 0;
+            else if(state[i] == 2)
+                v[i] = u_[i];
+        }
+        return v;
+    }
+
+  private:
+    Matrix A_;
+    Vector b_, u_;
+    Index m_, n_;
+
+    /// 単に合計１になるよう自由変数をシフト／スケーリング
+    void projectSum1(Vector& v) {
+        double s = v.sum();
+        if(s > 0) v /= s;
+    }
+};
+
 // =========================================================
 // Common
 // =========================================================
@@ -1295,9 +1399,61 @@ class ColorMixer {
         return results_fract_cache[key];
     }
 
+    Result get_fract_result_with_upper_vols(int h, vector<double>& upper_vols) {
+        Eigen::MatrixXd A_ext;
+        A_ext.resize(3, input.K);
+        for(int k = 0; k < input.K; ++k) {
+            auto col = input.own[k];
+            Eigen::Vector3d c(col[0], col[1], col[2]);
+            A_ext.block<3, 1>(0, k) = c;
+        }
+
+        Eigen::Vector3d t_ext;
+        t_ext(0) = input.target[h][0];
+        t_ext(1) = input.target[h][1];
+        t_ext(2) = input.target[h][2];
+
+        Eigen::VectorXd u;
+        u.resize(input.K);
+        for(int i = 0; i < input.K; ++i) {
+            u(i) = upper_vols[i];
+        }
+
+        BVLS_BoxSum solver(A_ext, t_ext, u);
+        Eigen::VectorXd x = solver.solve();
+        double sum_w = x.sum();
+
+        // assert(abs(sum_w - 1.0) < 1e-6); // 合計1制約
+        // for(int i = 0; i < input.K; ++i) {
+        //     assert(x(i) >= 0.0);  // 非負制約
+        //     assert(x(i) <= u(i)); // 上限制約
+        // }
+
+        vector<int> result_indices;
+        vector<double> weights;
+        if(sum_w < 1e-6) {
+            for(int i = 0; i < input.K; ++i) {
+                weights.push_back(1.0 / input.K);
+                result_indices.push_back(i);
+            }
+        } else {
+            for(int i = 0; i < input.K; ++i) {
+                if(x(i) > 1e-6) {
+                    result_indices.push_back(i);
+                    weights.push_back(x(i) / sum_w);
+                }
+            }
+        }
+
+        double sum_new_w = accumulate(weights.begin(), weights.end(), 0.0);
+        assert(abs(sum_new_w - 1.0) < 1e-6);
+
+        double true_err = calc_true_error(weights, result_indices, input.target[h]);
+        return Result{true_err * 1e4, move(result_indices), move(weights)};
+    }
+
     Result get_greedy_result(int h, int comb_size) {
         assert(0 <= h && h < input.H);
-        cpp_dump(h, comb_size);
         assert(GREEDY_COLOR_MIN <= comb_size && comb_size <= min(input.K, GREEDY_COLOR_MAX));
         pair<int, int> key = {h, comb_size};
         return results_greedy_cache[key];
@@ -1524,13 +1680,12 @@ void print_output(Output &output) {
 // ============================================================================
 
 const double MAX_TIME = 2800.0;
-const int INIT_PARTITION_POS = 1; // パーティション初期値
+const int INIT_PARTITION_POS = 0; // パーティション初期値
 long long MAX_SIMULATE_CNT = 2e7; // 分数パターンの最大数（目安）
-const int BUFFER_TURN = 20;       // 念のためバッファを持たせる
+const int BUFFER_TURN = 10;       // 念のためバッファを持たせる
 const int SEARCH_LEFT = -1;       // 直積の左側を探索
 const int SEARCH_RIGHT = 1;       // 直積の右側を探索
-const int MAX_SEARCH_NUM = 25;
-// const int MIN_SEARCH_NUM = 15;
+const int MAX_SEARCH_NUM = 28;
 
 // ============================================================================
 // Main
@@ -1702,16 +1857,6 @@ class ColorGroupManager {
             }
         }
 
-        // 初期のパーティション位置を設定
-        for(int k : range(input_data.K)) {
-            auto [y1, x1, y2, x2] = this->get_partition_pos(k, this->init_pos);
-            if(y1 == y2) {
-                wall_v[y1][min(x1, x2)] = true;
-            } else {
-                wall_h[min(y1, y2)][x1] = true;
-            }
-        }
-
         // 混合する仕切りを開けておく
         for(int k : range(input_data.K)) {
             int s = this->get_size(k);
@@ -1775,11 +1920,11 @@ class FractorManager {
         }
 
         unordered_set<Fractor> fractor_set;
-        for(int init_pos : range(max_denom, 0, -1)) {
+        for(int init_pos : range(max_denom, -1, -1)) {
             for(int fractor_cnt : range(apply_frac_cnt)) {
                 // 分数1回適応
                 if(fractor_cnt == 0) {
-                    for(int denominator : range(init_pos, max_denom + 1)) {
+                    for(int denominator : range(max(2, init_pos), max_denom + 1)) {
                         for(int numerator : range(1, denominator)) {
                             Fractor fractor = make_pair(numerator, denominator);
                             Fractor reduced_fractor = reduce_fraction(fractor);
@@ -1791,7 +1936,7 @@ class FractorManager {
                     }
                 } else if(fractor_cnt == 1) {
                     // 分数2回適応
-                    for(int d1 : range(init_pos + 1, max_denom + 1, MAX_STEP)) {
+                    for(int d1 : range(max(2, init_pos + 1), max_denom + 1, MAX_STEP)) {
                         for(int n1 : range(1, d1, MAX_STEP)) {
                             Fractor f1 = make_pair(n1, d1);
                             // 次の分母の最小値 = 下側のブロック数 = 前の分子
@@ -2128,39 +2273,36 @@ class PolicyFractor {
             } else if(first_fractor.first == 1 && first_fractor.second == 1) {
                 // 全開放
                 assert(frac_size == 1);
-                action_result.release_actions.emplace_back(color_group_manager.get_toggle_action(info.k, now_partition_pos));
+                if(now_partition_pos != 0) {
+                    // 先に仕切りを解放する
+                    action_result.release_actions.emplace_back(color_group_manager.get_toggle_action(info.k, now_partition_pos));
+                }
                 if(info.is_add) {
-                    // 仕切りを解放してから絵の具追加する(release_act)
+                    // 絵の具追加する(release_act)
                     action_result.release_actions.emplace_back(color_group_manager.get_add_paint_action(info.k));
                 }
-                action_result.post_actions.emplace_back(color_group_manager.get_toggle_action(info.k, INIT_PARTITION_POS));
-                reserved_changes.emplace_back(info.k, INIT_PARTITION_POS);
+                reserved_changes.emplace_back(info.k, 0);
             } else {
                 // 分割n回適応
                 int upper_partition = 0;
                 int lower_partition = now_partition_pos;
                 for(int fi : range(frac_size)) {
                     auto &fractor = info.fractors[fi];
-
                     // 上の仕切りから、分母だけ進んだのがstopしたいしきり位置
                     int stop_par_pos = upper_partition + fractor.second;
                     // stopする仕切りから、分子だけ進んだのが、releaseする仕切り位置
                     int release_par_pos = stop_par_pos - fractor.first;
-
                     if(stop_par_pos != lower_partition) {
                         // 現在の仕切りを動かす必要があるなら、仕切りを拡張する
                         action_result.pre_actions.emplace_back(color_group_manager.get_toggle_action(info.k, stop_par_pos));
-                        action_result.pre_actions.emplace_back(color_group_manager.get_toggle_action(info.k, lower_partition));
-                        // 拡張した後に追加する
-                        if(fi == 0 && info.is_add) {
-                            action_result.pre_actions.emplace_back(color_group_manager.get_add_paint_action(info.k));
+                        if(lower_partition != 0) {
+                            // 現在の仕切り位置が0でないなら、元の仕切りを解放しておく
+                            action_result.pre_actions.emplace_back(color_group_manager.get_toggle_action(info.k, lower_partition));
                         }
-                    } else {
-                        // 追加する
-                        if(fi == 0 && info.is_add) {
-                            assert(lower_partition > 1);
-                            action_result.pre_actions.emplace_back(color_group_manager.get_add_paint_action(info.k));
-                        }
+                    }
+                    // 拡張した後に追加する
+                    if(fi == 0 && info.is_add) {
+                        action_result.pre_actions.emplace_back(color_group_manager.get_add_paint_action(info.k));
                     }
                     // 分子の位置で止める
                     action_result.pre_actions.emplace_back(color_group_manager.get_toggle_action(info.k, release_par_pos));
@@ -2187,28 +2329,48 @@ class PolicyFractor {
         return action_result;
     }
 
-    DicisionAction dicision_action(Planner::PolicyItem &policy_item) {
-        // TODO 時間に応じてMAX_SEARCH_NUMを調整したい
-        // if(this->start_time == 0.0) {
-        //     this->start_time = this->time_keeper.getElapsedTime();
-        // }
-        // double elapsed_time = this->time_keeper.getElapsedTime() - this->start_time;
+    pair<double, vector<ImmediateInfo>> helper_turn(ColorMixer::Result &result, int max_double_frac_num) {
+        double best_cost = 1e9;
+        vector<ImmediateInfo> best_info;
+
+        int comb_size = result.indices.size();
+        vector<int> max_frac_cnt(comb_size, 1);
+        if(max_double_frac_num > 0) {
+            for(int j : range(min(max_double_frac_num, comb_size))) {
+                max_frac_cnt[comb_size - j - 1] = 2;
+            }
+        }
+        do {
+            auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt);
+            if(now_cost < best_cost) {
+                best_cost = now_cost;
+                best_info = now_info;
+            }
+        } while(next_permutation(ALL(max_frac_cnt)));
+
+        assert((int)best_info.size() != 0);
+        return {best_cost, best_info};
+    }
+
+    pair<double, vector<ImmediateInfo>> ordinaly_turn(Planner::PolicyItem &policy_item) {
+        // =====================================================================
+        // 通常ターンはPolicyにしたがって行動を決定する
+        // =====================================================================
 
         double best_cost = 1e9;
         vector<ImmediateInfo> best_info;
+
         auto results = mixer.get_fract_results(state.deliver_cnt, policy_item.comb_size);
         int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(policy_item.comb_size);
-        // assert(remain_turn >= 0); // Addが多いと残りターンがマイナスになる可能性がある
 
         for(int i : range(min((int)results.size(), MAX_SEARCH_NUM))) {
             auto &result = results[i];
             vector<int> max_frac_cnt(policy_item.comb_size, 1);
             if(policy_item.comb_size == 4) {
-                // 4色配合の場合、分数を2回適応できる可能性がある
-                int max_double_frac_num = min(4, (int)(remain_turn / 4.0));
+                int max_double_frac_num = min(policy_item.comb_size, (int)(remain_turn / 4.0));
                 if(max_double_frac_num > 0) {
-                    for(int i : range(max_double_frac_num)) {
-                        max_frac_cnt[policy_item.comb_size - i - 1] = 2;
+                    for(int j : range(max_double_frac_num)) {
+                        max_frac_cnt[policy_item.comb_size - j - 1] = 2;
                     }
                 }
             }
@@ -2222,10 +2384,88 @@ class PolicyFractor {
         }
 
         assert((int)best_info.size() != 0);
+        return {best_cost, best_info};
+    }
 
-        auto action_result = construct_from_immediateinfo(best_info);
-        action_result.cost = best_cost;
-        return action_result;
+    pair<double, vector<ImmediateInfo>> nealy_final_turn(Planner::PolicyItem &policy_item) {
+        // =====================================================================
+        // 最後の方は全パターン試す
+        // =====================================================================
+
+        double best_cost = 1e9;
+        vector<ImmediateInfo> best_info;
+
+        for(int comb_size : range(2, policy_item.comb_size + 1)) {
+            auto results = mixer.get_fract_results(state.deliver_cnt, comb_size);
+            int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
+            for(auto &result : results) {
+                vector<int> max_frac_cnt(comb_size, 1);
+                int max_double_frac_num = min(comb_size, (int)(remain_turn / 4.0));
+                if(max_double_frac_num > 0) {
+                    for(int i : range(max_double_frac_num)) {
+                        max_frac_cnt[comb_size - i - 1] = 2;
+                    }
+                }
+                do {
+                    auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt);
+                    if(now_cost < best_cost) {
+                        best_cost = now_cost;
+                        best_info = now_info;
+                    }
+                } while(next_permutation(ALL(max_frac_cnt)));
+            }
+        }
+
+        // 不等式制約つきで問題を解いてみる
+        vector<double> upper_vols;
+        for(int k : range(input.K)) {
+            upper_vols.push_back(color_group_manager.get_paint(k, state).vol);
+        }
+        double sum_vol = accumulate(ALL(upper_vols), 0.0);
+        if(sum_vol > 1.0) {
+            auto upper_vols_result = mixer.get_fract_result_with_upper_vols(state.deliver_cnt, upper_vols);
+            int comb_size = (int)upper_vols_result.indices.size();
+            int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
+            if(remain_turn >= 0) {
+                int max_double_frac_num = min(comb_size, (int)(remain_turn / 4.0));
+                auto [now_cost, now_info] = helper_turn(upper_vols_result, max_double_frac_num);
+                if(now_cost < best_cost) {
+                    // cerr << "!!upper_vols_update" << endl;
+                    best_cost = now_cost;
+                    best_info = now_info;
+                }
+            }
+        }
+
+        assert((int)best_info.size() != 0);
+        return {best_cost, best_info};
+    }
+
+    DicisionAction dicision_action(Planner::PolicyItem &policy_item) {
+        // TODO 時間に応じてMAX_SEARCH_NUMを調整したい
+        // if(this->start_time == 0.0) {
+        //     this->start_time = this->time_keeper.getElapsedTime();
+        // }
+        // double elapsed_time = this->time_keeper.getElapsedTime() - this->start_time;
+
+        double remain_vol = input.H - state.deliver_cnt;
+        double total_board_vol = 0.0;
+        for(int k : range(input.K)) {
+            total_board_vol += color_group_manager.get_paint(k, state).vol;
+        }
+        if(remain_vol >= total_board_vol + 4.0) {
+            // まだ余裕があるなら、通常ターン
+            auto [best_cost, best_info] = this->ordinaly_turn(policy_item);
+            auto action_result = construct_from_immediateinfo(best_info);
+            action_result.cost = best_cost;
+            return action_result;
+        } else {
+            // 最後の方は全パターン試す
+            auto [best_cost, best_info] = this->nealy_final_turn(policy_item);
+            auto action_result = construct_from_immediateinfo(best_info);
+            action_result.cost = best_cost;
+            return action_result;
+        }
     }
 };
 class PolicyGreedy {
