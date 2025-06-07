@@ -395,16 +395,26 @@ class Planner {
     PolicyItem get_policy(int h) {
         assert(0 <= h && h < input.H);
         int best_index = planning_result_indices[h];
-        auto &temp_result = all_tmp_results[h][best_index];
+        double best_cost = all_tmp_results[h][best_index].cost;
         auto limit_turn = predicted_accumulated_turns[h];
-        PolicyItem policy = {.policy_id = temp_result.policy_id, .comb_size = (int)temp_result.indices.size(), .limit_turn = limit_turn};
+        for(int i : range(all_tmp_results[h].size())) {
+            if(i == best_index) continue;
+            auto &temp_result = all_tmp_results[h][i];
+            if(temp_result.cost < best_cost && temp_result.pred_turn + state.turn <= limit_turn) {
+                best_index = i;
+                best_cost = temp_result.cost;
+            }
+        }
+        auto &best_result = all_tmp_results[h][best_index];
+        PolicyItem policy = {.policy_id = best_result.policy_id, .comb_size = (int)best_result.indices.size(), .limit_turn = limit_turn};
         return policy;
     }
 
     void planning() {
-        int max_trun = min(input.T - BUFFER_TURN, MAX_TURN);
+        int buf_max_turn = input.T - BUFFER_TURN;
+        int max_trun = min(buf_max_turn, MAX_TURN);
         vector<vector<pair<double, int>>> dp(input.H + 1, vector<pair<double, int>>(max_trun + 1, {1e18, -1}));
-        dp[0][0] = {0.0, -1}; // 初期状態
+        dp[0][0] = {0.0, -1};
 
         // DP計算による各ターンの最適戦略を求める
         // !! 全体でO(10^8)程度
@@ -422,16 +432,20 @@ class Planner {
             }
         }
 
-        // 計画復元
+        // H回目の最適ターン
         int best_turn = -1;
         double best_cost = 1e18;
-        for(int t : range(max_trun, -1, -1)) {
+        for(int t : range(max_trun + 1)) {
             if(dp[input.H][t].first < best_cost) {
                 best_cost = dp[input.H][t].first;
                 best_turn = t;
             }
         }
 
+        assert(buf_max_turn >= best_turn);
+        int remain_turn = buf_max_turn - best_turn;
+
+        // 計画復元
         planning_result_indices.resize(input.H);
         int t = best_turn;
         for(int h = input.H; h > 0; --h) {
@@ -448,6 +462,14 @@ class Planner {
             int best_index = planning_result_indices[h];
             predicted_accumulated_turns[h] = predicted_accumulated_turns[h - 1] + all_tmp_results[h][best_index].pred_turn;
         }
+
+        // 各hのターン数上限
+        for(int h : range(input.H)) {
+            double add_turn = (double)remain_turn / (double)input.H * (h + 1);
+            predicted_accumulated_turns[h] += add_turn;
+        }
+
+        assert(predicted_accumulated_turns[input.H - 1] <= buf_max_turn);
     }
 };
 
@@ -469,7 +491,6 @@ class PolicyFractor {
         Fractors fractors;
     };
 
-    // コンストラクタ
     PolicyFractor(Input &input_, State &state_, ColorMixer &mixer_, ColorGroupManager &color_group_manager_, FractorManager &fractor_manager_,
                   TimeKeeper &time_keeper_)
         : input(input_), state(state_), mixer(mixer_), color_group_manager(color_group_manager_), fractor_manager(fractor_manager_), time_keeper(time_keeper_) {
@@ -531,7 +552,6 @@ class PolicyFractor {
     tuple<vector<ImmediateInfo>, double> eval_one_result(ColorMixer::Result &constrait, vector<int> &max_frac_cnt) {
         int comb_size = constrait.indices.size();
 
-        // 2^comb_size 個の組み合わせを評価する
         vector<vector<ImmediateInfo>> infos;
         for(int comb_ind : range(comb_size)) {
             auto &k = constrait.indices[comb_ind];
@@ -711,7 +731,7 @@ class PolicyGreedy {
         DicisionAction action_result;
         action_result.pre_actions = actions;
         action_result.cost = result.cost;
-        action_result.change_color_num = 99; // TODO: 特に意味がない
+        action_result.change_color_num = 99; // TODO: 特に意味がない値
         return action_result;
     }
 };
