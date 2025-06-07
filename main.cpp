@@ -9,9 +9,9 @@
 // ============================================================================
 
 const double MAX_TIME = 2800.0;
-const int INIT_PARTITION_POS = 1; // パーティション初期値
+const int INIT_PARTITION_POS = 0; // パーティション初期値
 long long MAX_SIMULATE_CNT = 2e7; // 分数パターンの最大数（目安）
-const int BUFFER_TURN = 20;       // 念のためバッファを持たせる
+const int BUFFER_TURN = 10;       // 念のためバッファを持たせる
 const int SEARCH_LEFT = -1;       // 直積の左側を探索
 const int SEARCH_RIGHT = 1;       // 直積の右側を探索
 const int MAX_SEARCH_NUM = 25;
@@ -187,16 +187,6 @@ class ColorGroupManager {
             }
         }
 
-        // 初期のパーティション位置を設定
-        for(int k : range(input_data.K)) {
-            auto [y1, x1, y2, x2] = this->get_partition_pos(k, this->init_pos);
-            if(y1 == y2) {
-                wall_v[y1][min(x1, x2)] = true;
-            } else {
-                wall_h[min(y1, y2)][x1] = true;
-            }
-        }
-
         // 混合する仕切りを開けておく
         for(int k : range(input_data.K)) {
             int s = this->get_size(k);
@@ -260,11 +250,11 @@ class FractorManager {
         }
 
         unordered_set<Fractor> fractor_set;
-        for(int init_pos : range(max_denom, 0, -1)) {
+        for(int init_pos : range(max_denom, -1, -1)) {
             for(int fractor_cnt : range(apply_frac_cnt)) {
                 // 分数1回適応
                 if(fractor_cnt == 0) {
-                    for(int denominator : range(init_pos, max_denom + 1)) {
+                    for(int denominator : range(max(2, init_pos), max_denom + 1)) {
                         for(int numerator : range(1, denominator)) {
                             Fractor fractor = make_pair(numerator, denominator);
                             Fractor reduced_fractor = reduce_fraction(fractor);
@@ -276,7 +266,7 @@ class FractorManager {
                     }
                 } else if(fractor_cnt == 1) {
                     // 分数2回適応
-                    for(int d1 : range(init_pos + 1, max_denom + 1, MAX_STEP)) {
+                    for(int d1 : range(max(2, init_pos + 1), max_denom + 1, MAX_STEP)) {
                         for(int n1 : range(1, d1, MAX_STEP)) {
                             Fractor f1 = make_pair(n1, d1);
                             // 次の分母の最小値 = 下側のブロック数 = 前の分子
@@ -613,39 +603,36 @@ class PolicyFractor {
             } else if(first_fractor.first == 1 && first_fractor.second == 1) {
                 // 全開放
                 assert(frac_size == 1);
-                action_result.release_actions.emplace_back(color_group_manager.get_toggle_action(info.k, now_partition_pos));
+                if(now_partition_pos != 0) {
+                    // 先に仕切りを解放する
+                    action_result.release_actions.emplace_back(color_group_manager.get_toggle_action(info.k, now_partition_pos));
+                }
                 if(info.is_add) {
-                    // 仕切りを解放してから絵の具追加する(release_act)
+                    // 絵の具追加する(release_act)
                     action_result.release_actions.emplace_back(color_group_manager.get_add_paint_action(info.k));
                 }
-                action_result.post_actions.emplace_back(color_group_manager.get_toggle_action(info.k, INIT_PARTITION_POS));
-                reserved_changes.emplace_back(info.k, INIT_PARTITION_POS);
+                reserved_changes.emplace_back(info.k, 0);
             } else {
                 // 分割n回適応
                 int upper_partition = 0;
                 int lower_partition = now_partition_pos;
                 for(int fi : range(frac_size)) {
                     auto &fractor = info.fractors[fi];
-
                     // 上の仕切りから、分母だけ進んだのがstopしたいしきり位置
                     int stop_par_pos = upper_partition + fractor.second;
                     // stopする仕切りから、分子だけ進んだのが、releaseする仕切り位置
                     int release_par_pos = stop_par_pos - fractor.first;
-
                     if(stop_par_pos != lower_partition) {
                         // 現在の仕切りを動かす必要があるなら、仕切りを拡張する
                         action_result.pre_actions.emplace_back(color_group_manager.get_toggle_action(info.k, stop_par_pos));
-                        action_result.pre_actions.emplace_back(color_group_manager.get_toggle_action(info.k, lower_partition));
-                        // 拡張した後に追加する
-                        if(fi == 0 && info.is_add) {
-                            action_result.pre_actions.emplace_back(color_group_manager.get_add_paint_action(info.k));
+                        if(lower_partition != 0) {
+                            // 現在の仕切り位置が0でないなら、元の仕切りを解放しておく
+                            action_result.pre_actions.emplace_back(color_group_manager.get_toggle_action(info.k, lower_partition));
                         }
-                    } else {
-                        // 追加する
-                        if(fi == 0 && info.is_add) {
-                            assert(lower_partition > 1);
-                            action_result.pre_actions.emplace_back(color_group_manager.get_add_paint_action(info.k));
-                        }
+                    }
+                    // 拡張した後に追加する
+                    if(fi == 0 && info.is_add) {
+                        action_result.pre_actions.emplace_back(color_group_manager.get_add_paint_action(info.k));
                     }
                     // 分子の位置で止める
                     action_result.pre_actions.emplace_back(color_group_manager.get_toggle_action(info.k, release_par_pos));
