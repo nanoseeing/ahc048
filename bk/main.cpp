@@ -34,7 +34,7 @@ struct GroupInfo {
     int size;
 };
 
-class ManageGroupInfo {
+class ColorGroupManager {
   private:
     int n;
     int k;
@@ -96,7 +96,7 @@ class ManageGroupInfo {
     }
 
   public:
-    ManageGroupInfo(int n_, int k_, int original_k_, int init_pos_ = 2) : n(n_), k(k_), original_k(original_k_), init_pos(init_pos_) {
+    ColorGroupManager(int n_, int k_, int original_k_, int init_pos_ = 2) : n(n_), k(k_), original_k(original_k_), init_pos(init_pos_) {
         infos = construct_group_info();
     }
 
@@ -192,7 +192,7 @@ class ManageGroupInfo {
     }
 };
 
-void PolicyGreedy(Input &input, State &state, ManageGroupInfo &group_info) {
+void PolicyGreedy(Input &input, State &state, ColorGroupManager &group_info) {
     auto target_color = input.target[state.deliver_cnt];
 
     double min_cost = 1e9;
@@ -248,11 +248,11 @@ class DicisionActionPerResult {
   public:
     vector<RateItem> rate_items;
 
-    DicisionActionPerResult(State &state, Input &input, ManageGroupInfo &group_info) {
+    DicisionActionPerResult(State &state, Input &input, ColorGroupManager &group_info) {
         this->construct(state, input, group_info);
     }
 
-    void construct(State &state, Input &input, ManageGroupInfo &group_info) {
+    void construct(State &state, Input &input, ColorGroupManager &group_info) {
         this->rate_items.resize(input.K);
 
         for(int k : range(input.K)) {
@@ -352,7 +352,7 @@ class DicisionActionPerResult {
         }
     }
 
-    double eval_cost(Input &input, State &state, vector<ImmediateInfo> &immeediate_info, ManageGroupInfo &group_info) {
+    double eval_cost(Input &input, State &state, vector<ImmediateInfo> &immeediate_info, ColorGroupManager &group_info) {
         auto &now_target = state.input.target[state.deliver_cnt];
 
         double sum_vol = 0.0;
@@ -524,7 +524,7 @@ class DicisionActionPerResult {
     }
 };
 
-DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, ManageGroupInfo &manage_group_info, State &state) {
+DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, ColorGroupManager &manage_group_info, State &state) {
     DicisionAction action_result;
     action_result.change_color_num = (int)best_info.size();
 
@@ -599,7 +599,7 @@ DicisionAction construct_from_immediateinfo(vector<ImmediateInfo> &best_info, Ma
     return action_result;
 }
 
-DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, double obj_turn, ManageGroupInfo &group_info) {
+DicisionAction dicision_action(Input &input, State &state, ColorMixer &mixer, double obj_turn, ColorGroupManager &group_info) {
     Color target = input.target[state.deliver_cnt];
     auto all_results = mixer.find_topN(target, TOP_N);
 
@@ -664,7 +664,7 @@ void solve() {
     // }
     // input.K = 20;
 
-    ManageGroupInfo manage_group_info(input.N, input.K, input.K, INIT_PARTITION_POS);
+    ColorGroupManager manage_group_info(input.N, input.K, input.K, INIT_PARTITION_POS);
     auto init_wall = manage_group_info.struct_init_wall(input);
     State state(init_wall, input);
 

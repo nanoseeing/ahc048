@@ -40,7 +40,7 @@ struct GroupInfo {
     int size;
 };
 
-class ManageGroupInfo {
+class ColorGroupManager {
   private:
     int n;
     int k;
@@ -101,7 +101,7 @@ class ManageGroupInfo {
     }
 
   public:
-    ManageGroupInfo(int k_, int n_, int init_pos_ = 2) : n(n_), k(k_), init_pos(init_pos_) {
+    ColorGroupManager(int k_, int n_, int init_pos_ = 2) : n(n_), k(k_), init_pos(init_pos_) {
         infos = construct_group_info();
     }
 

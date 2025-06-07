@@ -82,7 +82,7 @@ class ColorMixer {
     };
 
     static constexpr double EPS = 1e-7;
-    static constexpr int MAX_ITER = 50;
+    static constexpr int MAX_ITER = 30;
 
     const int THRESHOLD = 500; // 20C3
 
@@ -95,9 +95,9 @@ class ColorMixer {
 
         for(int i = 2; i <= 4; ++i) {
             auto subsets = construct_subsets(i, K);
-            if(subsets.size() > THRESHOLD) {
+            if((int)subsets.size() > THRESHOLD) {
                 shuffle(subsets.begin(), subsets.end(), engine);
-                subsets.resize(min(THRESHOLD, (int)subsets.size()));
+                subsets.resize(min((int)THRESHOLD, (int)subsets.size()));
             }
             subsets_cache[i] = move(subsets);
         }
