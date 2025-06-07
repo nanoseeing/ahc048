@@ -11,15 +11,22 @@
 const double MAX_TIME = 2800.0;
 const int INIT_PARTITION_POS = 1; // パーティション初期値
 long long MAX_SIMULATE_CNT = 2e7; // 分数パターンの最大数（目安）
-const int BUFFER_TURN = 10;       // 念のためバッファを持たせる
+const int BUFFER_TURN = 20;       // 念のためバッファを持たせる
 const int SEARCH_LEFT = -1;       // 直積の左側を探索
 const int SEARCH_RIGHT = 1;       // 直積の右側を探索
-const int MAX_SEARCH_NUM = 20;
+const int MAX_SEARCH_NUM = 25;
 
 // ============================================================================
 // Main
 // ============================================================================
 
+int calc_pred_fractor_turn(int comb_size) {
+    return comb_size * 4 + 3; // 追加,配達,削除
+}
+
+int calc_pred_greedy_turn(int comb_size) {
+    return comb_size * 2;
+}
 class ColorGroupManager {
   private:
     struct GroupInfo {
@@ -353,14 +360,6 @@ class Planner {
     vector<int> planning_result_indices;
     vector<int> predicted_accumulated_turns;
 
-    int calc_pred_fractor_turn(int comb_size) {
-        return comb_size * 4 + 3; // 追加,配達,削除
-    }
-
-    int calc_pred_greedy_turn(int comb_size) {
-        return comb_size * 2;
-    }
-
     Planner(Input &input_, State &state_, ColorMixer &mixer_) : input(input_), state(state_), mixer(mixer_) {
         for(int h : range(input.H)) {
             vector<TmpResult> tmp_results;
@@ -469,7 +468,7 @@ class Planner {
             predicted_accumulated_turns[h] += add_turn;
         }
 
-        assert(predicted_accumulated_turns[input.H - 1] <= buf_max_turn);
+        assert(abs(predicted_accumulated_turns[input.H - 1] - buf_max_turn) <= 3);
     }
 };
 
@@ -682,17 +681,21 @@ class PolicyFractor {
         double best_cost = 1e9;
         vector<ImmediateInfo> best_info;
         auto results = mixer.get_fract_results(state.deliver_cnt, policy_item.comb_size);
+        int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(policy_item.comb_size);
+        // assert(remain_turn >= 0); // Addが多いと残りターンがマイナスになる可能性がある
+
         for(int i : range(min((int)results.size(), MAX_SEARCH_NUM))) {
             auto &result = results[i];
-            // TODO
-            // int max_double_frac_num = (int)(remain_turn / 4.0); // 分数2回適応できる数
-            // max_double_frac_num = min(max_double_frac_num, comb_size);
             vector<int> max_frac_cnt(policy_item.comb_size, 1);
-            // if(max_double_frac_num > 0) {
-            //     for(int i : range(max_double_frac_num)) {
-            //         max_frac_cnt[comb_size - i - 1] = 2;
-            //     }
-            // }
+            if(policy_item.comb_size == 4) {
+                // 4色配合の場合、分数を2回適応できる可能性がある
+                int max_double_frac_num = min(4, (int)(remain_turn / 4.0));
+                if(max_double_frac_num > 0) {
+                    for(int i : range(max_double_frac_num)) {
+                        max_frac_cnt[policy_item.comb_size - i - 1] = 2;
+                    }
+                }
+            }
             do {
                 auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt);
                 if(now_cost < best_cost) {
