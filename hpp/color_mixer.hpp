@@ -185,7 +185,7 @@ class ColorMixer {
 
         // 2, 3色のNNLSを解く
         auto& subsets = subsets_cache[comb_size];
-        if(subsets.size() > THRESHOLD) {
+        if((int)subsets.size() > THRESHOLD) {
             shuffle(subsets.begin(), subsets.end(), engine);
             subsets.resize(min(THRESHOLD, (int)subsets.size()));
         }

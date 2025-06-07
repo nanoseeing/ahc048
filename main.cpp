@@ -15,24 +15,25 @@ const int BUFFER_TURN = 10;                              // 念のためバッ�
 const int SEARCH_LEFT = -1;                              // 直積の左側を探索
 const int SEARCH_RIGHT = 1;                              // 直積の右側を探索
 const double BUF_MUL_TURN = 2.0;                         // 色数 x 4.0 + BUF_MUL_TURNぐらい掛かるはず
-const double SWITH_POLICY_OBJ_TURN = 8.0 + BUF_MUL_TURN; // 2色（8.0ターン）も混合できないなら、分数混合を諦める
+const double SWICH_POLICY_OBJ_TURN = 8.0 + BUF_MUL_TURN; // 2色（8.0ターン）も混合できないなら、分数混合を諦める
+const int MAX_POLICY_GREEDY_COLOR_NUMS = 5;
 const vector<pair<int, int>> COMB_SEARCH_NUMS = {{2, 3}, {3, 5}, {4, 25}};
 
 // ============================================================================
 // Main
 // ============================================================================
 
-struct GroupInfo {
-    int k;
-    int row_num;
-    int start_x;
-    std::vector<std::pair<int, int>> roots;
-    int now_pos;
-    int size;
-};
-
 class ColorGroupManager {
   private:
+    struct GroupInfo {
+        int k;
+        int row_num;
+        int start_x;
+        std::vector<std::pair<int, int>> roots;
+        int now_pos;
+        int size;
+    };
+
     int n;
     int k;
     int original_k;
@@ -319,14 +320,6 @@ class FractorManager {
     }
 };
 
-struct ImmediateInfo {
-    int k;
-    bool is_add;
-    double rate;
-    double vol;
-    Fractors fractors;
-};
-
 struct DicisionAction {
     vector<Action> pre_actions;
     vector<Action> release_actions;
@@ -349,6 +342,13 @@ class PolicyFractor {
     TimeKeeper &time_keeper;
 
     double start_time = 0.0; // TODO
+    struct ImmediateInfo {
+        int k;
+        bool is_add;
+        double rate;
+        double vol;
+        Fractors fractors;
+    };
 
     // コンストラクタ
     PolicyFractor(Input &input_, State &state_, ColorMixer &mixer_, ColorGroupManager &color_group_manager_, FractorManager &fractor_manager_,
@@ -579,7 +579,7 @@ class PolicyFractor {
 };
 class PolicyGreedy {
   public:
-    const int MAX_MIX_COLOR_NUM = 5; // N色まで混合可能にしておかないと、メモリが足りない
+    const int MAX_MIX_COLOR_NUM = MAX_POLICY_GREEDY_COLOR_NUMS; // N色まで混合可能にしておかないと、メモリが足りない
     Input &input;
     State &state;
     vector<Color> mix_cache;
@@ -660,11 +660,82 @@ class PolicyGreedy {
     }
 };
 
+class Planner {
+  public:
+    struct PolicyItem {
+        int turn;
+        double cost;
+    };
+
+    Input &input;
+    State &state;
+    vector<PolicyItem> planning_polices;
+    vector<int> predicted_accumulated_turns;
+
+    Planner(Input &input_, State &state_, vector<vector<PolicyItem>> &policy_item) : input(input_), state(state_) {
+        planning(policy_item);
+    }
+
+    PolicyItem get_policy(int h) {
+        assert(0 <= h && h < input.H);
+        return planning_polices[h];
+    }
+
+    void planning(vector<vector<PolicyItem>> &policy_items) {
+        const int MAX_TURN = 19005; // (4 * 4 + 3 = 19) * 1000 = 19000
+        vector<vector<pair<double, int>>> dp(input.H + 1, vector<pair<double, int>>(MAX_TURN + 1, {1e18, -1}));
+        for(int h : range(input.H + 1)) {
+            dp[h][0] = {0.0, -1};
+        }
+
+        // DP計算による各ターンの最適戦略を求める
+        // !! 全体でO(10^8)程度
+        for(int h : range(input.H)) {
+            for(int t : range(MAX_TURN)) {
+                for(int i : range(policy_items[h].size())) {
+                    auto &item = policy_items[h][i];
+                    if(item.turn + t <= MAX_TURN) {
+                        double new_cost = dp[h][t].first + item.cost;
+                        if(new_cost < dp[h + 1][t + item.turn].first) {
+                            dp[h + 1][t + item.turn] = {new_cost, i};
+                        }
+                    }
+                }
+            }
+        }
+
+        // 計画復元
+        int best_turn = -1;
+        double best_cost = 1e18;
+        for(int t : range(MAX_TURN)) {
+            if(dp[input.H][t].first < best_cost) {
+                best_cost = dp[input.H][t].first;
+                best_turn = t;
+            }
+        }
+
+        planning_polices.resize(input.H);
+        int t = best_turn;
+        for(int h = input.H; h > 0; --h) {
+            int i = dp[h][t].second;
+            planning_polices[h - 1] = policy_items[h - 1][i];
+            t -= policy_items[h - 1][i].turn;
+        }
+
+        // 累積ターン数を計算
+        predicted_accumulated_turns.resize(input.H);
+        predicted_accumulated_turns[0] = planning_polices[0].turn;
+        for(int h = 1; h < input.H; ++h) {
+            predicted_accumulated_turns[h] = predicted_accumulated_turns[h - 1] + planning_polices[h].turn;
+        }
+    }
+};
+
 void print_info(State &state) {
     auto [deliver_cost, err_cost, total_cost] = state.get_score();
     cerr << boost::format("H: %4d | Turn: %5d/%5d | Add: %4d | Discard: %4d (%5d loss) | Score: %5d (add: %5d, err: %5d)") % state.deliver_cnt % state.turn %
                 state.input.T % state.add_cnt % state.discard_cnt % int(state.discard * 1e4) % total_cost % deliver_cost % err_cost
-         << endl;
+         << "\n";
 }
 
 void apply_actions(DicisionAction &dicision_act, State &state, Input &input, bool is_end) {
@@ -701,20 +772,20 @@ void solve() {
     PolicyGreedy policy_greedy(input, state);
     PolicyFractor policy_fractor(input, state, mixer, color_group_manager, fractor_manager, time_keeper);
 
-    // Main Loop
     int policy_greedy_cnt = 0;
     double policy_err_sum = 0.0;
     map<int, int> act_cnt;
     map<int, int> color_cnt;
 
     try {
+        // Main Loop
         for(int h : range(input.H)) {
             if(h % 10 == 0) print_info(state);
             int remain_turn = input.T - state.turn - BUFFER_TURN;
             double obj_turn = (double)remain_turn / (double)(input.H - state.deliver_cnt);
 
             DicisionAction best_act;
-            if(obj_turn >= SWITH_POLICY_OBJ_TURN) {
+            if(obj_turn >= SWICH_POLICY_OBJ_TURN) {
                 best_act = policy_fractor.dicision_action(obj_turn);
             } else {
                 best_act = policy_greedy.dicision_action(obj_turn);
@@ -731,23 +802,23 @@ void solve() {
     } catch(const exception &e) {
         Output output = Output{init_wall, state.actions};
         print_output(output);
-        cerr << "Exception: " << e.what() << endl;
+        cerr << "Exception: " << e.what() << "\n";
         exit(1);
     }
 
     // 情報
     if(policy_greedy_cnt > 0) {
-        cerr << boost::format("PolicyGreedy %d times. Error %d") % policy_greedy_cnt % (policy_err_sum) << endl;
+        cerr << boost::format("PolicyGreedy %d times. Error %d") % policy_greedy_cnt % (policy_err_sum) << "\n";
     }
     for(const auto &p : act_cnt) {
         int color_num = p.first;
         int call = color_cnt[color_num];
         int total = p.second;
         double avg = (double)total / (double)call;
-        cerr << boost::format("color num: %d, call: %d, total: %d, avg: %f") % color_num % call % total % avg << endl;
+        cerr << boost::format("color num: %d, call: %d, total: %d, avg: %f") % color_num % call % total % avg << "\n";
     }
-    cerr << boost::format("K: %d, T:%d, D:%d") % input.K % input.T % input.D << endl;
-    cerr << boost::format("score: %d, elapsed: %f, turn: %d/%d") % get<2>(state.get_score()) % time_keeper.getElapsedTime() % state.turn % input.T << endl;
+    cerr << boost::format("K: %d, T:%d, D:%d") % input.K % input.T % input.D << "\n";
+    cerr << boost::format("score: %d, elapsed: %f, turn: %d/%d") % get<2>(state.get_score()) % time_keeper.getElapsedTime() % state.turn % input.T << "\n";
 
     // output
     Output output = Output{init_wall, state.actions};

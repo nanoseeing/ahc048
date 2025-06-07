@@ -1,6 +1,5 @@
 
 
-
 // =========================================================
 // Common
 // =========================================================
@@ -64,8 +63,8 @@ namespace Eigen {
 namespace internal {
 
 template <typename MatrixQR, typename HCoeffs, typename VectorQR>
-void householder_qr_inplace_update(MatrixQR& mat, HCoeffs& hCoeffs, const VectorQR& newColumn, typename MatrixQR::Index k,
-                                   typename MatrixQR::Scalar* tempData) {
+void householder_qr_inplace_update(MatrixQR &mat, HCoeffs &hCoeffs, const VectorQR &newColumn, typename MatrixQR::Index k,
+                                   typename MatrixQR::Scalar *tempData) {
     typedef typename MatrixQR::Index Index;
     typedef typename MatrixQR::RealScalar RealScalar;
     Index rows = mat.rows();
@@ -863,7 +862,7 @@ std::mt19937 engine(42);
 #include <Eigen/Dense>
 
 // 単純体への射影関数
-Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd& v) {
+Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd &v) {
     const int n = v.size();
     std::vector<double> u(n);
     for(int i = 0; i < n; ++i)
@@ -919,7 +918,7 @@ class ColorMixer {
         vector<int> indices;
         vector<double> weights;
 
-        bool operator<(Result const& o) const {
+        bool operator<(Result const &o) const {
             return err < o.err;
         }
     };
@@ -938,7 +937,7 @@ class ColorMixer {
     int K;
 
     unordered_map<int, vector<vector<int>>> subsets_cache;
-    ColorMixer(const vector<Color>& paints_input) : paints(paints_input) {
+    ColorMixer(const vector<Color> &paints_input) : paints(paints_input) {
         K = paints.size();
 
         for(int i = 2; i <= 4; ++i) {
@@ -951,7 +950,7 @@ class ColorMixer {
         }
     }
 
-    double calc_true_error(vector<double>& weights, vector<int>& indices, Color& target) {
+    double calc_true_error(vector<double> &weights, vector<int> &indices, Color &target) {
         double true_err = 0.0;
         for(int j = 0; j < 3; ++j) {
             double now_c = 0.0;
@@ -965,7 +964,7 @@ class ColorMixer {
         return sqrt(true_err);
     }
 
-    Result nnls(Color& target, vector<int>& indices, double tol, double iter) {
+    Result nnls(Color &target, vector<int> &indices, double tol, double iter) {
         const int N = indices.size();
 
         Eigen::MatrixXd A_ext;
@@ -1003,7 +1002,7 @@ class ColorMixer {
         return Result{true_err, indices, weights};
     }
 
-    vector<Result> solve_nnls(Color& t, int comb_size, int find_top_n) {
+    vector<Result> solve_nnls(Color &t, int comb_size, int find_top_n) {
         assert(comb_size <= 4 && comb_size >= 2);
 
         vector<Result> results;
@@ -1032,17 +1031,17 @@ class ColorMixer {
         }
 
         // 2, 3色のNNLSを解く
-        auto& subsets = subsets_cache[comb_size];
+        auto &subsets = subsets_cache[comb_size];
         if(subsets.size() > THRESHOLD) {
             shuffle(subsets.begin(), subsets.end(), engine);
             subsets.resize(min(THRESHOLD, (int)subsets.size()));
         }
 
-        for(auto& indices : subsets) {
+        for(auto &indices : subsets) {
             Result r = nnls(t, indices, EPS, MAX_ITER);
             results.emplace_back(move(r));
         }
-        sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
+        sort(ALL(results), [&](auto &a, auto &b) { return a.err < b.err; });
         results.resize(min(find_top_n, (int)results.size()));
         return results;
     }
@@ -1393,7 +1392,7 @@ struct State {
                  << endl;
         }
     }
-};// Skipped: common.hpp already included
+}; // Skipped: common.hpp already included
 // Skipped: game.hpp already included
 
 // =========================================================
@@ -1441,7 +1440,7 @@ void print_output(Output &output) {
     for(const auto &action : output.actions) {
         cout << action.to_string_output() << "\n";
     }
-}// Skipped: utils.hpp already included
+} // Skipped: utils.hpp already included
 
 // ============================================================================
 // 定義
@@ -1454,7 +1453,7 @@ const int BUFFER_TURN = 10;                              // 念のためバッ�
 const int SEARCH_LEFT = -1;                              // 直積の左側を探索
 const int SEARCH_RIGHT = 1;                              // 直積の右側を探索
 const double BUF_MUL_TURN = 2.0;                         // 色数 x 4.0 + BUF_MUL_TURNぐらい掛かるはず
-const double SWITH_POLICY_OBJ_TURN = 8.0 + BUF_MUL_TURN; // 2色（8.0ターン）も混合できないなら、分数混合を諦める
+const double SWICH_POLICY_OBJ_TURN = 8.0 + BUF_MUL_TURN; // 2色（8.0ターン）も混合できないなら、分数混合を諦める
 const vector<pair<int, int>> COMB_SEARCH_NUMS = {{2, 3}, {3, 5}, {4, 25}};
 
 // ============================================================================
@@ -2153,7 +2152,7 @@ void solve() {
             double obj_turn = (double)remain_turn / (double)(input.H - state.deliver_cnt);
 
             DicisionAction best_act;
-            if(obj_turn >= SWITH_POLICY_OBJ_TURN) {
+            if(obj_turn >= SWICH_POLICY_OBJ_TURN) {
                 best_act = policy_fractor.dicision_action(obj_turn);
             } else {
                 best_act = policy_greedy.dicision_action(obj_turn);

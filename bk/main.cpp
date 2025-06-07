@@ -18,7 +18,7 @@ const int MAX_RESULT = 20;
 
 const int BUFFER_TURN = 30; // 30ターンは余裕を持たせる
 
-const double SWITH_POLICY_OBJ_TURN = 9.0;
+const double SWICH_POLICY_OBJ_TURN = 9.0;
 const int MAX_APPLY_FRACTOR = 1; // 分数適応回数の最大値
 
 // ============================================================================
@@ -706,7 +706,7 @@ void solve() {
             int remain_turn = input.T - state.turn - BUFFER_TURN;
             double obj_turn = (double)remain_turn / (double)(input.H - state.deliver_cnt);
 
-            if(obj_turn >= SWITH_POLICY_OBJ_TURN) {
+            if(obj_turn >= SWICH_POLICY_OBJ_TURN) {
                 auto action_result = dicision_action(input, state, mixer, obj_turn, manage_group_info);
 
                 // tmp
