@@ -84,7 +84,7 @@ class ColorMixer {
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 30;
     const int FIND_TOP_N = 100;
-    const int SUBSET_NUM_THRESHOLD = 500; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
+    const int SUBSET_NUM_THRESHOLD = 400; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
 
     const int GREEDY_COLOR_MIN = 1; // greedyで混合する最小色数
     const int GREEDY_COLOR_MAX = 5; // greedyで混合する最大色数
@@ -105,46 +105,47 @@ class ColorMixer {
 
     Result get_greedy_result(int h, int comb_size) {
         assert(0 <= h && h < input.H);
-        assert(GREEDY_COLOR_MIN <= comb_size && comb_size <= GREEDY_COLOR_MAX);
+        cpp_dump(h, comb_size);
+        assert(GREEDY_COLOR_MIN <= comb_size && comb_size <= min(input.K, GREEDY_COLOR_MAX));
         pair<int, int> key = {h, comb_size};
         return results_greedy_cache[key];
     }
 
     void construct_greedy_policy() {
-        for(int comb_size = GREEDY_COLOR_MIN; comb_size <= GREEDY_COLOR_MAX; ++comb_size) {
-            for(int h = 0; h < input.H; ++h) {
-                Result tmp_result;
-                tmp_result.cost = 1e18;
-                results_greedy_cache[{h, comb_size}] = tmp_result;
-            }
+        int max_comb_size = min(input.K, GREEDY_COLOR_MAX);
+        for(int comb_size = GREEDY_COLOR_MIN; comb_size <= max_comb_size; ++comb_size) {
             auto subsets = construct_subsets(comb_size, input.K);
-            for(const auto& subset : subsets) {
-                vector<int> indices;
-                for(int i : subset) {
-                    indices.push_back(i);
+            vector<double> best_costs(input.H, 1e9);
+            vector<int> best_subset_inds(input.H, -1);
+
+            for(int subi : range((int)subsets.size())) {
+                const auto& subset = subsets[subi];
+                Color mixed_color = {0.0, 0.0, 0.0};
+                for(int c = 0; c < 3; ++c) {
+                    for(const int i : subset) {
+                        mixed_color[c] += input.own[i][c];
+                    }
+                    mixed_color[c] /= (double)comb_size;
                 }
-                vector<Color> colors;
-                vector<double> vols;
-                for(const int i : subset) {
-                    colors.push_back(input.own[i]);
-                    vols.push_back(1.0);
-                }
-                Color mixed_color = mix(vols, colors);
-                for(int h = 0; h < input.H; ++h) {
+                for(int h : range(input.H)) {
                     Color& target_color = input.target[h];
                     double err = eval_error(mixed_color, target_color);
                     double cost = err * 1e4 + (double)(input.D) * (double)(comb_size - 1);
-                    if(cost < results_greedy_cache[{h, comb_size}].cost) {
-                        Result r = {cost, indices, vector<double>(comb_size, 1.0)};
-                        results_greedy_cache[{h, comb_size}] = move(r);
+                    if(cost < best_costs[h]) {
+                        best_costs[h] = cost;
+                        best_subset_inds[h] = subi;
                     }
                 }
+            }
+            for(int h : range(input.H)) {
+                Result r = {best_costs[h], subsets[best_subset_inds[h]], vector<double>(comb_size, 1.0)};
+                results_greedy_cache[{h, comb_size}] = move(r);
             }
         }
 
         // 少ないターン数でエラーが小さければ採用する
         for(int h = 0; h < input.H; ++h) {
-            for(int comb_size = GREEDY_COLOR_MIN + 1; comb_size <= GREEDY_COLOR_MAX; ++comb_size) {
+            for(int comb_size = GREEDY_COLOR_MIN + 1; comb_size <= max_comb_size; ++comb_size) {
                 auto& pre_result = results_greedy_cache[{h, comb_size - 1}];
                 auto& now_result = results_greedy_cache[{h, comb_size}];
                 if(pre_result.cost < now_result.cost) {

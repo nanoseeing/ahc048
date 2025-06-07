@@ -15,6 +15,7 @@ const int BUFFER_TURN = 20;       // 念のためバッファを持たせる
 const int SEARCH_LEFT = -1;       // 直積の左側を探索
 const int SEARCH_RIGHT = 1;       // 直積の右側を探索
 const int MAX_SEARCH_NUM = 25;
+// const int MIN_SEARCH_NUM = 15;
 
 // ============================================================================
 // Main
@@ -364,7 +365,7 @@ class Planner {
         for(int h : range(input.H)) {
             vector<TmpResult> tmp_results;
             // PolicyGreedy
-            for(int comb_size : range(1, 6)) {
+            for(int comb_size : range(1, min(5, input.K) + 1)) {
                 auto r = mixer.get_greedy_result(h, comb_size);
                 TmpResult tmp_result{.cost = r.cost,
                                      .pred_turn = calc_pred_greedy_turn(comb_size),

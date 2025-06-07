@@ -1353,41 +1353,54 @@ class ColorMixer {
                 shuffle(subsets.begin(), subsets.end(), engine);
                 subsets.resize(min((int)SUBSET_NUM_THRESHOLD, (int)subsets.size()));
             }
-            for(int h = 0; h < input.H; ++h) {
-                Color& t = input.target[h];
-                vector<Result> results;
+            for(auto& indices : subsets) {
+                Eigen::MatrixXd A_ext;
+                A_ext.resize(4, comb_size);
+                for(int k = 0; k < comb_size; ++k) {
+                    auto col = this->input.own[indices[k]];
+                    Eigen::Vector3d c(col[0], col[1], col[2]);
+                    A_ext.block<3, 1>(0, k) = c;
+                }
+                A_ext.row(3).setOnes();
 
-                if(comb_size == FRAC_COLOR_MAX) {
-                    // NNLSを解けば基本的に4色だけ残るはず。
-                    vector<int> indices;
-                    for(int i = 0; i < this->input.K; ++i) {
-                        indices.push_back(i);
-                    }
-                    auto [true_err, weights] = nnls(t, indices, EPS, MAX_ITER);
+                Eigen::NNLS<Eigen::MatrixXd> nnls_solver;
+                nnls_solver.compute(A_ext);
+                nnls_solver.setTolerance(EPS);
+                nnls_solver.setMaxIterations(MAX_ITER);
 
-                    vector<int> inds4;
-                    vector<double> weights4;
-                    for(int i = 0; i < this->input.K; ++i) {
-                        if(weights[i] > EPS) {
-                            inds4.push_back(i);
-                            weights4.push_back(weights[i]);
+                vector<vector<Result>> tmp_results;
+                for(int h = 0; h < input.H; ++h) {
+                    Color& t = input.target[h];
+                    auto [true_err, weights] = nnls_helper(nnls_solver, t, indices, EPS, MAX_ITER);
+                    tmp_results[h].emplace_back(Result{true_err * 1e4, indices, weights});
+                    if(comb_size == FRAC_COLOR_MAX) {
+                        // NNLSを解けば基本的に4色だけ残るはず。
+                        vector<int> indices;
+                        for(int i = 0; i < this->input.K; ++i) {
+                            indices.push_back(i);
                         }
+                        auto [true_err, weights] = nnls(t, indices, EPS, MAX_ITER);
+
+                        vector<int> inds4;
+                        vector<double> weights4;
+                        for(int i = 0; i < this->input.K; ++i) {
+                            if(weights[i] > EPS) {
+                                inds4.push_back(i);
+                                weights4.push_back(weights[i]);
+                            }
+                        }
+                        assert((int)inds4.size() <= 4);
+
+                        // info: Errorは計算し直さなくて良いはず。また、weightsは0なので、addコストはない
+                        Result new_r = Result{true_err * 1e4, move(inds4), move(weights4)};
+                        tmp_results[h].emplace_back(move(new_r));
                     }
-                    assert((int)inds4.size() <= 4);
-
-                    // info: Errorは計算し直さなくて良いはず。また、weightsは0なので、addコストはない
-                    Result new_r = Result{true_err * 1e4, move(inds4), move(weights4)};
-                    results.emplace_back(move(new_r));
                 }
-
-                // 2, 3色のNNLSを解く
-                for(auto& indices : subsets) {
-                    auto [true_err, weights] = nnls(t, indices, EPS, MAX_ITER);
-                    results.emplace_back(Result{true_err * 1e4, indices, weights});
+                for(int h : range(input.H)) {
+                    sort(ALL(tmp_results[h]), [&](auto& a, auto& b) { return a.cost < b.cost; });
+                    tmp_results[h].resize(min(FIND_TOP_N, (int)tmp_results[h].size()));
+                    results_fract_cache[{h, comb_size}] = move(tmp_results[h]);
                 }
-                sort(ALL(results), [&](auto& a, auto& b) { return a.cost < b.cost; });
-                results.resize(min(FIND_TOP_N, (int)results.size()));
-                results_fract_cache[{h, comb_size}] = move(results);
             }
         }
     }
@@ -1408,6 +1421,30 @@ class ColorMixer {
         nnls_solver.compute(A_ext);
         nnls_solver.setTolerance(tol);
         nnls_solver.setMaxIterations(iter);
+
+        Eigen::Vector4d t_ext;
+        t_ext(0) = target[0];
+        t_ext(1) = target[1];
+        t_ext(2) = target[2];
+        t_ext(3) = 1.0; // 「和が１になる」項を擬似的に加える
+
+        Eigen::VectorXd x = nnls_solver.solve(t_ext);
+        x = ProjectOntoSimplex(x); // 射影して非負かつ合計が1にする
+
+        double sum_w = x.sum();
+        assert(abs(sum_w - 1.0) < 1e-6);
+
+        vector<double> weights;
+        for(int i = 0; i < N; ++i) {
+            weights.push_back(x(i) / sum_w); // 射影すれば1になるはずだが念のため正規化しておく
+        }
+
+        double true_err = calc_true_error(weights, indices, target);
+        return {true_err, weights};
+    }
+
+    tuple<double, vector<double>> nnls_helper(Eigen::NNLS<Eigen::MatrixXd>& nnls_solver, Color& target, vector<int>& indices, double tol, double iter) {
+        const int N = indices.size();
 
         Eigen::Vector4d t_ext;
         t_ext(0) = target[0];
@@ -1494,7 +1531,29 @@ void print_output(Output &output) {
     for(const auto &action : output.actions) {
         cout << action.to_string_output() << "\n";
     }
-}// Skipped: utils.hpp already included
+}
+
+// こっちの方が早いかも？
+// void print_output(Output &output) {
+//     ostringstream oss;
+//     const auto &wall = output.init_wall;
+//     for(int i = 0; i < (int)wall.wall_v.size(); ++i) {
+//         for(int j = 0; j < (int)wall.wall_v[i].size(); ++j) {
+//             oss << (wall.wall_v[i][j] ? "1" : "0") << " ";
+//         }
+//         oss << "\n";
+//     }
+//     for(int i = 0; i < (int)wall.wall_h.size(); ++i) {
+//         for(int j = 0; j < (int)wall.wall_h[i].size(); ++j) {
+//             oss << (wall.wall_h[i][j] ? "1" : "0") << " ";
+//         }
+//         oss << "\n";
+//     }
+//     for(const auto &action : output.actions) {
+//         oss << action.to_string_output() << "\n";
+//     }
+//     cout << oss.str(); // まとめて出力
+// }// Skipped: utils.hpp already included
 
 // ============================================================================
 // 定義

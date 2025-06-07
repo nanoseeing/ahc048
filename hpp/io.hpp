@@ -48,3 +48,25 @@ void print_output(Output &output) {
         cout << action.to_string_output() << "\n";
     }
 }
+
+// こっちの方が早いかも？
+// void print_output(Output &output) {
+//     ostringstream oss;
+//     const auto &wall = output.init_wall;
+//     for(int i = 0; i < (int)wall.wall_v.size(); ++i) {
+//         for(int j = 0; j < (int)wall.wall_v[i].size(); ++j) {
+//             oss << (wall.wall_v[i][j] ? "1" : "0") << " ";
+//         }
+//         oss << "\n";
+//     }
+//     for(int i = 0; i < (int)wall.wall_h.size(); ++i) {
+//         for(int j = 0; j < (int)wall.wall_h[i].size(); ++j) {
+//             oss << (wall.wall_h[i][j] ? "1" : "0") << " ";
+//         }
+//         oss << "\n";
+//     }
+//     for(const auto &action : output.actions) {
+//         oss << action.to_string_output() << "\n";
+//     }
+//     cout << oss.str(); // まとめて出力
+// }
