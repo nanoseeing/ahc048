@@ -105,7 +105,6 @@ class ColorMixer {
 
     Result get_greedy_result(int h, int comb_size) {
         assert(0 <= h && h < input.H);
-        cpp_dump(h, comb_size);
         assert(GREEDY_COLOR_MIN <= comb_size && comb_size <= min(input.K, GREEDY_COLOR_MAX));
         pair<int, int> key = {h, comb_size};
         return results_greedy_cache[key];
