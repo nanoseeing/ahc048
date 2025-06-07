@@ -540,8 +540,6 @@ class PolicyFractor {
         }
         double elapsed_time = this->time_keeper.getElapsedTime() - this->start_time;
 
-        Color target = input.target[state.deliver_cnt];
-
         double best_cost = 1e9;
         vector<ImmediateInfo> best_info;
         for(const auto &comb_search_num : COMB_SEARCH_NUMS) {
@@ -550,8 +548,9 @@ class PolicyFractor {
             if(remain_turn < 0.0) {
                 continue; // 目標ターン数を超える場合はスキップ
             }
-            auto results = mixer.solve_nnls(target, comb_size, now_search_num);
-            for(auto &result : results) {
+            auto results = mixer.get_results(state.deliver_cnt, comb_size);
+            for(int i : range(min((int)results.size(), now_search_num))) {
+                auto &result = results[i];
                 int max_double_frac_num = (int)(remain_turn / 4.0); // 分数2回適応できる数
                 max_double_frac_num = min(max_double_frac_num, comb_size);
                 vector<int> max_frac_cnt(comb_size, 1);
@@ -767,7 +766,7 @@ void solve() {
     FractorManager fractor_manager(unique_sizes_);
     auto init_wall = color_group_manager.struct_init_wall(input);
     State state(init_wall, input);
-    ColorMixer mixer(input.own);
+    ColorMixer mixer(input);
 
     PolicyGreedy policy_greedy(input, state);
     PolicyFractor policy_fractor(input, state, mixer, color_group_manager, fractor_manager, time_keeper);

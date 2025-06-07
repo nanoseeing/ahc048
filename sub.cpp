@@ -931,7 +931,7 @@ class ColorMixer {
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 30;
 
-    const int THRESHOLD = 500; // 20C3
+    const int SUBSET_NUM_THRESHOLD = 500; // 20C3
 
     vector<Color> paints;
     int K;
@@ -942,9 +942,9 @@ class ColorMixer {
 
         for(int i = 2; i <= 4; ++i) {
             auto subsets = construct_subsets(i, K);
-            if((int)subsets.size() > THRESHOLD) {
+            if((int)subsets.size() > SUBSET_NUM_THRESHOLD) {
                 shuffle(subsets.begin(), subsets.end(), engine);
-                subsets.resize(min((int)THRESHOLD, (int)subsets.size()));
+                subsets.resize(min((int)SUBSET_NUM_THRESHOLD, (int)subsets.size()));
             }
             subsets_cache[i] = move(subsets);
         }
@@ -1032,9 +1032,9 @@ class ColorMixer {
 
         // 2, 3色のNNLSを解く
         auto &subsets = subsets_cache[comb_size];
-        if(subsets.size() > THRESHOLD) {
+        if(subsets.size() > SUBSET_NUM_THRESHOLD) {
             shuffle(subsets.begin(), subsets.end(), engine);
-            subsets.resize(min(THRESHOLD, (int)subsets.size()));
+            subsets.resize(min(SUBSET_NUM_THRESHOLD, (int)subsets.size()));
         }
 
         for(auto &indices : subsets) {

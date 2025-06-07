@@ -3,6 +3,7 @@
 
 #include "common.hpp"
 #include "ex/nnls.hpp"
+#include "game.hpp"
 #include "utils.hpp"
 
 // ====================================
@@ -75,46 +76,75 @@ class ColorMixer {
             return err < o.err;
         }
     };
-
     struct SubsetInfo {
         int size;
         vector<int> indices;
     };
 
+    Input& input;
+    unordered_map<pair<int, int>, vector<Result>> results_cache; // key:(h, comb_size), value: Result
+
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 30;
+    const int SUBSET_NUM_THRESHOLD = 500; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
 
-    const int THRESHOLD = 500; // 20C3
-
-    vector<Color> paints;
-    int K;
-
-    unordered_map<int, vector<vector<int>>> subsets_cache;
-    ColorMixer(const vector<Color>& paints_input) : paints(paints_input) {
-        K = paints.size();
-
-        for(int i = 2; i <= 4; ++i) {
-            auto subsets = construct_subsets(i, K);
-            if((int)subsets.size() > THRESHOLD) {
-                shuffle(subsets.begin(), subsets.end(), engine);
-                subsets.resize(min((int)THRESHOLD, (int)subsets.size()));
-            }
-            subsets_cache[i] = move(subsets);
-        }
+    ColorMixer(Input& input_) : input(input_) {
+        construct();
     }
 
-    double calc_true_error(vector<double>& weights, vector<int>& indices, Color& target) {
-        double true_err = 0.0;
-        for(int j = 0; j < 3; ++j) {
-            double now_c = 0.0;
-            for(int i = 0; i < (int)indices.size(); ++i) {
-                int idx = indices[i];
-                now_c += paints[idx][j] * weights[i];
+    vector<Result> get_results(int h, int comb_size) {
+        assert(0 <= h && h < input.H);
+        assert(2 <= comb_size && comb_size <= 4);
+        pair<int, int> key = {h, comb_size};
+        return results_cache[key];
+    }
+
+    void construct() {
+        const int FIND_TOP_N = 100;
+
+        for(int comb_size = 2; comb_size <= 4; ++comb_size) {
+            auto subsets = construct_subsets(comb_size, input.K);
+            if((int)subsets.size() > SUBSET_NUM_THRESHOLD) {
+                shuffle(subsets.begin(), subsets.end(), engine);
+                subsets.resize(min((int)SUBSET_NUM_THRESHOLD, (int)subsets.size()));
             }
-            double diff = now_c - target[j];
-            true_err += diff * diff;
+            for(int h = 0; h < input.H; ++h) {
+                Color& t = input.target[h];
+                vector<Result> results;
+
+                if(comb_size == 4) {
+                    // NNLSを解けば基本的に4色だけ残るはず。
+                    vector<int> indices;
+                    for(int i = 0; i < this->input.K; ++i) {
+                        indices.push_back(i);
+                    }
+                    Result r = nnls(t, indices, EPS, MAX_ITER);
+
+                    vector<int> inds4;
+                    vector<double> weights4;
+                    for(int i = 0; i < this->input.K; ++i) {
+                        if(r.weights[i] > EPS) {
+                            inds4.push_back(i);
+                            weights4.push_back(r.weights[i]);
+                        }
+                    }
+                    assert((int)inds4.size() <= 4);
+
+                    // 一応計算Errorは計算しなおさないといけないが、ほぼ誤差の範囲のはず
+                    Result new_r = Result{r.err, move(inds4), move(weights4)};
+                    results.emplace_back(move(new_r));
+                }
+
+                // 2, 3色のNNLSを解く
+                for(auto& indices : subsets) {
+                    Result r = nnls(t, indices, EPS, MAX_ITER);
+                    results.emplace_back(move(r));
+                }
+                sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
+                results.resize(min(FIND_TOP_N, (int)results.size()));
+                results_cache[{h, comb_size}] = move(results);
+            }
         }
-        return sqrt(true_err);
     }
 
     Result nnls(Color& target, vector<int>& indices, double tol, double iter) {
@@ -123,7 +153,7 @@ class ColorMixer {
         Eigen::MatrixXd A_ext;
         A_ext.resize(4, N);
         for(int k = 0; k < N; ++k) {
-            auto col = this->paints[indices[k]];
+            auto col = this->input.own[indices[k]];
             Eigen::Vector3d c(col[0], col[1], col[2]);
             A_ext.block<3, 1>(0, k) = c;
         }
@@ -155,47 +185,17 @@ class ColorMixer {
         return Result{true_err, indices, weights};
     }
 
-    vector<Result> solve_nnls(Color& t, int comb_size, int find_top_n) {
-        assert(comb_size <= 4 && comb_size >= 2);
-
-        vector<Result> results;
-
-        if(comb_size == 4) { // !DEBUG
-            // NNLSを解けば基本的に4色だけ残るはず。
-            vector<int> indices;
-            for(int i = 0; i < this->K; ++i) {
-                indices.push_back(i);
+    double calc_true_error(vector<double>& weights, vector<int>& indices, Color& target) {
+        double true_err = 0.0;
+        for(int j = 0; j < 3; ++j) {
+            double now_c = 0.0;
+            for(int i = 0; i < (int)indices.size(); ++i) {
+                int idx = indices[i];
+                now_c += input.own[idx][j] * weights[i];
             }
-            Result r = nnls(t, indices, EPS, MAX_ITER);
-
-            vector<int> inds4;
-            vector<double> weights4;
-            for(int i = 0; i < this->K; ++i) {
-                if(r.weights[i] > EPS) {
-                    inds4.push_back(i);
-                    weights4.push_back(r.weights[i]);
-                }
-            }
-            assert((int)inds4.size() <= 4);
-
-            // 一応計算Errorは計算しなおさないといけないが、ほぼ誤差の範囲のはず
-            Result new_r = Result{r.err, move(inds4), move(weights4)};
-            results.emplace_back(move(new_r));
+            double diff = now_c - target[j];
+            true_err += diff * diff;
         }
-
-        // 2, 3色のNNLSを解く
-        auto& subsets = subsets_cache[comb_size];
-        if((int)subsets.size() > THRESHOLD) {
-            shuffle(subsets.begin(), subsets.end(), engine);
-            subsets.resize(min(THRESHOLD, (int)subsets.size()));
-        }
-
-        for(auto& indices : subsets) {
-            Result r = nnls(t, indices, EPS, MAX_ITER);
-            results.emplace_back(move(r));
-        }
-        sort(ALL(results), [&](auto& a, auto& b) { return a.err < b.err; });
-        results.resize(min(find_top_n, (int)results.size()));
-        return results;
+        return sqrt(true_err);
     }
 };
