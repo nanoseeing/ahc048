@@ -48,24 +48,6 @@ Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd& v) {
     return w;
 }
 
-vector<vector<int>> construct_subsets(int size, int k) {
-    vector<vector<int>> subsets;
-    vector<int> comb(size);
-    function<void(int, int)> dfs = [&](int start, int depth) {
-        if(depth == size) {
-            subsets.emplace_back(comb.begin(), comb.end());
-            return;
-        }
-        for(int x = start; x < k; x++) {
-            comb[depth] = x;
-            dfs(x + 1, depth + 1);
-        }
-    };
-    dfs(0, 0);
-
-    return subsets;
-}
-
 class ColorMixer {
   public:
     struct Result {
@@ -84,12 +66,12 @@ class ColorMixer {
 
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 30;
-    static const int FIND_TOP_N = 100;
-    static const int SUBSET_NUM_THRESHOLD = 400; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
-    static const int GREEDY_COLOR_MIN = 1;       // greedyで混合する最小色数
-    static const int GREEDY_COLOR_MAX = 5;       // greedyで混合する最大色数
-    static const int FRAC_COLOR_MIN = 2;         // 分数混合で混合する最小色数
-    static const int FRAC_COLOR_MAX = 4;         // 分数混合で混合する最大色数
+    static constexpr int FIND_TOP_N = 100;
+    static constexpr int SUBSET_NUM_THRESHOLD = 400; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
+    static constexpr int GREEDY_COLOR_MIN = 1;       // greedyで混合する最小色数
+    static constexpr int GREEDY_COLOR_MAX = 5;       // greedyで混合する最大色数
+    static constexpr int FRAC_COLOR_MIN = 2;         // 分数混合で混合する最小色数
+    static constexpr int FRAC_COLOR_MAX = 4;         // 分数混合で混合する最大色数
 
     ColorMixer(Input& input_) : input(input_) {
         construct_fract_policy();

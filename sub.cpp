@@ -121,6 +121,13 @@ using namespace std;
 #define cpp_dump(...) ;
 #endif
 
+// DEBUG用のマクロ
+#ifdef DEBUG
+#define IS_DEBUG true
+#else
+#define IS_DEBUG false
+#endif
+
 using ll = long long;
 using Color = array<double, 3>;
 using Fractor = pair<int, int>;
@@ -871,15 +878,6 @@ void cartesian_product(const std::vector<std::vector<T>> &vectors, Func callback
     }
 }
 
-double exponential_schedule(double init, double obj, double elapsed_time, double max_time) {
-    double lambda_param = log(obj / init) / max_time;
-    return init * exp(lambda_param * elapsed_time);
-}
-
-double linear_schedule(double init, double obj, double elapsed_time, double max_time) {
-    return init + (obj - init) * (elapsed_time / max_time);
-}
-
 pair<int, int> reduce_fraction(pair<int, int> frac) {
     int num = frac.first;
     int den = frac.second;
@@ -923,41 +921,24 @@ void reorder_vector(std::vector<T> &vec, const std::vector<size_t> &indices) {
     vec = std::move(reordered);
 }
 
-void choose_front(int start, int needed, int m, std::vector<int> &sel, std::vector<std::vector<int>> &result_list) {
-    if(needed == 0) {
-        std::vector<int> full = sel;
-        full.push_back(m);
-        result_list.push_back(full);
-        return;
-    }
-
-    for(int i = start; i <= m - needed; ++i) {
-        sel.push_back(i);
-        choose_front(i + 1, needed - 1, m, sel, result_list);
-        sel.pop_back();
-    }
-}
-
-vector<vector<int>> choose_nCk(const int N, const int K, int max_comb = 10000) {
-    std::vector<int> buffer;
-    std::vector<std::vector<int>> tmp;
-    vector<vector<int>> comb_list;
-    for(int m = K - 1; m < N; ++m) {
-        tmp.clear();
-        buffer.clear();
-        choose_front(0, K - 1, m, buffer, tmp);
-        for(auto &comb : tmp) {
-            if((int)comb_list.size() >= max_comb) {
-                return comb_list;
-            }
-            comb_list.push_back(comb);
+vector<vector<int>> construct_subsets(int size, int k) {
+    vector<vector<int>> subsets;
+    vector<int> comb(size);
+    function<void(int, int)> dfs = [&](int start, int depth) {
+        if(depth == size) {
+            subsets.emplace_back(comb.begin(), comb.end());
+            return;
         }
-    }
+        for(int x = start; x < k; x++) {
+            comb[depth] = x;
+            dfs(x + 1, depth + 1);
+        }
+    };
+    dfs(0, 0);
 
-    return comb_list;
+    return subsets;
 }
 
-Xorshift64 xor_rng;
 // =========================================================
 // Game
 // =========================================================
@@ -1144,6 +1125,8 @@ struct State {
     int deliver_cnt = 0;
     int discard_cnt = 0;
 
+    State() = default;
+
     State(const Wall &init_wall, const Input &input) {
         this->input = input;
         this->wall = init_wall;
@@ -1292,13 +1275,17 @@ struct State {
         }
     }
 
-    void debug() {
-        for(const auto &paint : this->paints) {
-            if(paint.vol < 1e-6) continue; // 1g未満は表示しない
-            cerr << boost::format("ID: %d, Cap: %d, Vol: %.2f, Color: (%.2f, %.2f, %.2f)") % paint.id % paint.cap % paint.vol % paint.color[0] %
-                        paint.color[1] % paint.color[2]
-                 << endl;
+    void apply_actions(vector<Action> actions) {
+        for(const auto &act : actions) {
+            this->apply(act);
         }
+    }
+
+    void print_info() {
+        auto [deliver_cost, err_cost, total_cost] = get_score();
+        cerr << boost::format("H: %4d | Turn: %5d/%5d | Add: %4d | Discard: %4d (%5d loss) | Score: %5d (add: %5d, err: %5d)") % deliver_cnt % turn % input.T %
+                    add_cnt % discard_cnt % int(discard * 1e4) % total_cost % deliver_cost % err_cost
+             << "\n";
     }
 };// Skipped: utils.hpp already included
 
@@ -1343,24 +1330,6 @@ Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd& v) {
     return w;
 }
 
-vector<vector<int>> construct_subsets(int size, int k) {
-    vector<vector<int>> subsets;
-    vector<int> comb(size);
-    function<void(int, int)> dfs = [&](int start, int depth) {
-        if(depth == size) {
-            subsets.emplace_back(comb.begin(), comb.end());
-            return;
-        }
-        for(int x = start; x < k; x++) {
-            comb[depth] = x;
-            dfs(x + 1, depth + 1);
-        }
-    };
-    dfs(0, 0);
-
-    return subsets;
-}
-
 class ColorMixer {
   public:
     struct Result {
@@ -1379,13 +1348,12 @@ class ColorMixer {
 
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 30;
-    const int FIND_TOP_N = 100;
-    const int SUBSET_NUM_THRESHOLD = 400; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
-
-    const int GREEDY_COLOR_MIN = 1; // greedyで混合する最小色数
-    const int GREEDY_COLOR_MAX = 5; // greedyで混合する最大色数
-    const int FRAC_COLOR_MIN = 2;   // 分数混合で混合する最小色数
-    const int FRAC_COLOR_MAX = 4;   // 分数混合で混合する最大色数
+    static constexpr int FIND_TOP_N = 100;
+    static constexpr int SUBSET_NUM_THRESHOLD = 400; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
+    static constexpr int GREEDY_COLOR_MIN = 1;       // greedyで混合する最小色数
+    static constexpr int GREEDY_COLOR_MAX = 5;       // greedyで混合する最大色数
+    static constexpr int FRAC_COLOR_MIN = 2;         // 分数混合で混合する最小色数
+    static constexpr int FRAC_COLOR_MAX = 4;         // 分数混合で混合する最大色数
 
     ColorMixer(Input& input_) : input(input_) {
         construct_fract_policy();
@@ -1440,11 +1408,14 @@ class ColorMixer {
             for(int i = 0; i < input.K; ++i) {
                 if(x(i) > 1e-6) {
                     result_indices.push_back(i);
-                    weights.push_back(x(i) / sum_w);
+                    weights.push_back(x(i));
                 }
             }
         }
-
+        double tmp_sum_w = accumulate(weights.begin(), weights.end(), 0.0);
+        for(int i : range(weights.size())) {
+            weights[i] /= tmp_sum_w; // 正規化
+        }
         double sum_new_w = accumulate(weights.begin(), weights.end(), 0.0);
         assert(abs(sum_new_w - 1.0) < 1e-6);
 
@@ -1603,6 +1574,109 @@ class ColorMixer {
 };
 // Skipped: common.hpp already included
 // Skipped: game.hpp already included
+
+
+// Skipped: common.hpp already included
+// Skipped: game.hpp already included
+// Skipped: utils.hpp already included
+
+// ====================================
+// NNLSを解くためのクラス
+// ====================================
+
+class GreedyMixer {
+  public:
+    struct Result {
+        double err;
+        vector<int> indices;
+
+        bool operator<(Result const& o) const {
+            return err < o.err;
+        }
+    };
+
+    Input& input;
+    unordered_map<pair<int, int>, Result> results_greedy_cache;      // key:(h, comb_size), value: Result
+    unordered_map<int, vector<Color>> mixed_colors_cache;            // key: comb_size, value: mixed colors
+    unordered_map<int, vector<vector<int>>> mixed_colors_inds_cache; // key: comb_size, value: mixed color indices
+
+    static constexpr int GREEDY_COLOR_MIN = 1; // greedyで混合する最小色数
+    int GREEDY_COLOR_MAX;
+
+    GreedyMixer(Input& input_, int GREEDY_COLOR_MAX_) : input(input_), GREEDY_COLOR_MAX(GREEDY_COLOR_MAX_) {
+        construct_mixed_color();
+        construct_greedy_policy();
+    }
+
+    int get_color_max() {
+        return min(input.K, GREEDY_COLOR_MAX);
+    }
+
+    Result get_greedy_result(int h, int comb_size) {
+        assert(0 <= h && h < input.H);
+        assert(GREEDY_COLOR_MIN <= comb_size && comb_size <= get_color_max());
+        pair<int, int> key = {h, comb_size};
+        return results_greedy_cache[key];
+    }
+
+    vector<Color> get_mixed_colors(int comb_size) {
+        assert(GREEDY_COLOR_MIN <= comb_size && comb_size <= get_color_max());
+        return mixed_colors_cache[comb_size];
+    }
+
+    void construct_mixed_color() {
+        int max_comb_size = min(input.K, GREEDY_COLOR_MAX);
+        for(int comb_size = GREEDY_COLOR_MIN; comb_size <= max_comb_size; ++comb_size) {
+            auto subsets = construct_subsets(comb_size, input.K);
+            for(const auto& subset : subsets) {
+                Color mixed_color = {0.0, 0.0, 0.0};
+                for(int c = 0; c < 3; ++c) {
+                    for(const int i : subset) {
+                        mixed_color[c] += input.own[i][c];
+                    }
+                    mixed_color[c] /= (double)comb_size;
+                }
+                mixed_colors_cache[comb_size].push_back(mixed_color);
+                mixed_colors_inds_cache[comb_size].push_back(subset);
+            }
+        }
+    }
+
+    void construct_greedy_policy() {
+        int max_comb_size = min(input.K, GREEDY_COLOR_MAX);
+        for(int comb_size = GREEDY_COLOR_MIN; comb_size <= max_comb_size; ++comb_size) {
+            vector<double> best_costs(input.H, 1e9);
+            vector<int> best_subset_inds(input.H, -1);
+
+            for(int subi : range((int)mixed_colors_cache[comb_size].size())) {
+                const auto& mixed_color = mixed_colors_cache[comb_size][subi];
+                for(int h : range(input.H)) {
+                    Color& target_color = input.target[h];
+                    double err = eval_error(mixed_color, target_color);
+                    if(err < best_costs[h]) {
+                        best_costs[h] = err;
+                        best_subset_inds[h] = subi;
+                    }
+                }
+            }
+            for(int h : range(input.H)) {
+                Result r = {best_costs[h], mixed_colors_inds_cache[comb_size][best_subset_inds[h]]};
+                results_greedy_cache[{h, comb_size}] = move(r);
+            }
+        }
+
+        // 少ないターン数でエラーが小さければ採用する
+        for(int h = 0; h < input.H; ++h) {
+            for(int comb_size = GREEDY_COLOR_MIN + 1; comb_size <= max_comb_size; ++comb_size) {
+                auto& pre_result = results_greedy_cache[{h, comb_size - 1}];
+                auto& now_result = results_greedy_cache[{h, comb_size}];
+                if(pre_result.err < now_result.err) {
+                    results_greedy_cache[{h, comb_size}] = pre_result;
+                }
+            }
+        }
+    }
+};
 // Skipped: common.hpp already included
 // Skipped: game.hpp already included
 
@@ -1652,47 +1726,32 @@ void print_output(Output &output) {
         cout << action.to_string_output() << "\n";
     }
 }
-
-// こっちの方が早いかも？
-// void print_output(Output &output) {
-//     ostringstream oss;
-//     const auto &wall = output.init_wall;
-//     for(int i = 0; i < (int)wall.wall_v.size(); ++i) {
-//         for(int j = 0; j < (int)wall.wall_v[i].size(); ++j) {
-//             oss << (wall.wall_v[i][j] ? "1" : "0") << " ";
-//         }
-//         oss << "\n";
-//     }
-//     for(int i = 0; i < (int)wall.wall_h.size(); ++i) {
-//         for(int j = 0; j < (int)wall.wall_h[i].size(); ++j) {
-//             oss << (wall.wall_h[i][j] ? "1" : "0") << " ";
-//         }
-//         oss << "\n";
-//     }
-//     for(const auto &action : output.actions) {
-//         oss << action.to_string_output() << "\n";
-//     }
-//     cout << oss.str(); // まとめて出力
-// }// Skipped: utils.hpp already included
-
+// Skipped: utils.hpp already included
 // ============================================================================
 // 定義
 // ============================================================================
 
 const double MAX_TIME = 2800.0;
+const int BUFFER_TURN = 10; // 念のためバッファを持たせる
+
+// Fractor関連の定義
+const double PARTITION_SWITCH_TURN = 4.0;
 const int INIT_PARTITION_POS = 0; // パーティション初期値
 long long MAX_SIMULATE_CNT = 2e7; // 分数パターンの最大数（目安）
-const int BUFFER_TURN = 10;       // 念のためバッファを持たせる
 const int SEARCH_LEFT = -1;       // 直積の左側を探索
 const int SEARCH_RIGHT = 1;       // 直積の右側を探索
-const int MAX_SEARCH_NUM = 28;
+const int MAX_SEARCH_NUM = 400;
+
+// Greedy関連の定義
+const int GREEDY_COLOR_MAX = 4;
+const int GROUP_SIZE = 4;
 
 // ============================================================================
 // Main
 // ============================================================================
 
 int calc_pred_fractor_turn(int comb_size) {
-    return comb_size * 4 + 3; // 追加,配達,削除
+    return comb_size * PARTITION_SWITCH_TURN + 3; // 追加,配達,削除
 }
 
 int calc_pred_greedy_turn(int comb_size) {
@@ -2025,7 +2084,7 @@ class Planner {
         for(int h : range(input.H)) {
             vector<TmpResult> tmp_results;
             // PolicyGreedy
-            for(int comb_size : range(1, min(5, input.K) + 1)) {
+            for(int comb_size : range(ColorMixer::GREEDY_COLOR_MIN, min(ColorMixer::GREEDY_COLOR_MAX, input.K) + 1)) {
                 auto r = mixer.get_greedy_result(h, comb_size);
                 TmpResult tmp_result{.cost = r.cost,
                                      .pred_turn = calc_pred_greedy_turn(comb_size),
@@ -2036,7 +2095,7 @@ class Planner {
                 tmp_results.push_back(tmp_result);
             }
             // PolicyFractor
-            for(int comb_size : range(2, 5)) {
+            for(int comb_size : range(ColorMixer::FRAC_COLOR_MIN, ColorMixer::FRAC_COLOR_MAX + 1)) {
                 auto results = mixer.get_fract_results(h, comb_size);
                 auto r = results[0]; // 先頭がBest
                 TmpResult tmp_result{.cost = r.cost,
@@ -2366,8 +2425,8 @@ class PolicyFractor {
         for(int i : range(min((int)results.size(), MAX_SEARCH_NUM))) {
             auto &result = results[i];
             vector<int> max_frac_cnt(policy_item.comb_size, 1);
-            if(policy_item.comb_size == 4) {
-                int max_double_frac_num = min(policy_item.comb_size, (int)(remain_turn / 4.0));
+            if(policy_item.comb_size == ColorMixer::FRAC_COLOR_MAX) {
+                int max_double_frac_num = min(policy_item.comb_size, (int)(remain_turn / PARTITION_SWITCH_TURN));
                 if(max_double_frac_num > 0) {
                     for(int j : range(max_double_frac_num)) {
                         max_frac_cnt[policy_item.comb_size - j - 1] = 2;
@@ -2400,7 +2459,7 @@ class PolicyFractor {
             int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
             for(auto &result : results) {
                 vector<int> max_frac_cnt(comb_size, 1);
-                int max_double_frac_num = min(comb_size, (int)(remain_turn / 4.0));
+                int max_double_frac_num = min(comb_size, (int)(remain_turn / PARTITION_SWITCH_TURN));
                 if(max_double_frac_num > 0) {
                     for(int i : range(max_double_frac_num)) {
                         max_frac_cnt[comb_size - i - 1] = 2;
@@ -2427,7 +2486,7 @@ class PolicyFractor {
             int comb_size = (int)upper_vols_result.indices.size();
             int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
             if(remain_turn >= 0) {
-                int max_double_frac_num = min(comb_size, (int)(remain_turn / 4.0));
+                int max_double_frac_num = min(comb_size, (int)(remain_turn / PARTITION_SWITCH_TURN));
                 auto [now_cost, now_info] = helper_turn(upper_vols_result, max_double_frac_num);
                 if(now_cost < best_cost) {
                     // cerr << "!!upper_vols_update" << endl;
@@ -2453,7 +2512,7 @@ class PolicyFractor {
         for(int k : range(input.K)) {
             total_board_vol += color_group_manager.get_paint(k, state).vol;
         }
-        if(remain_vol >= total_board_vol + 4.0) {
+        if(remain_vol >= total_board_vol + PARTITION_SWITCH_TURN) {
             // まだ余裕があるなら、通常ターン
             auto [best_cost, best_info] = this->ordinaly_turn(policy_item);
             auto action_result = construct_from_immediateinfo(best_info);
@@ -2495,13 +2554,6 @@ class PolicyGreedy {
     }
 };
 
-void print_info(State &state) {
-    auto [deliver_cost, err_cost, total_cost] = state.get_score();
-    cerr << boost::format("H: %4d | Turn: %5d/%5d | Add: %4d | Discard: %4d (%5d loss) | Score: %5d (add: %5d, err: %5d)") % state.deliver_cnt % state.turn %
-                state.input.T % state.add_cnt % state.discard_cnt % int(state.discard * 1e4) % total_cost % deliver_cost % err_cost
-         << "\n";
-}
-
 void apply_actions(DicisionAction &dicision_act, State &state, Input &input, bool is_end) {
     for(const auto &act : dicision_act.pre_actions) {
         state.apply(act);
@@ -2521,10 +2573,7 @@ void apply_actions(DicisionAction &dicision_act, State &state, Input &input, boo
     }
 }
 
-void solve() {
-    TimeKeeper time_keeper(MAX_TIME);
-
-    Input input = parse_input();
+pair<Output, State> solve_fractor(Input &input, TimeKeeper &time_keeper) {
     ColorGroupManager color_group_manager(input.N, input.K, input.K, INIT_PARTITION_POS);
     auto unique_sizes_ = color_group_manager.get_unique_sizes();
 
@@ -2545,7 +2594,7 @@ void solve() {
     try {
         // Main Loop
         for(int h : range(input.H)) {
-            if(h % 10 == 0) print_info(state);
+            if(h % 10 == 0 || h >= 990) state.print_info();
             auto policy = planner.get_policy(h);
 
             DicisionAction best_act;
@@ -2562,7 +2611,7 @@ void solve() {
             act_cnt[best_act.change_color_num] += best_act.act_cnt;
             color_cnt[best_act.change_color_num]++;
         }
-        print_info(state);
+        state.print_info();
     } catch(const exception &e) {
         Output output = Output{init_wall, state.actions};
         print_output(output);
@@ -2581,12 +2630,297 @@ void solve() {
         double avg = (double)total / (double)call;
         cerr << boost::format("color num: %d, call: %d, total: %d, avg: %f") % color_num % call % total % avg << "\n";
     }
+
+    Output output = Output{init_wall, state.actions};
+    return {output, state};
+}
+
+// ============================================================================
+// Solve Greedy
+// ============================================================================
+
+class ColorGroupManagerForMinimumTrun {
+  public:
+    struct GroupInfo {
+        int idx;
+        int pos_l, pos_r;
+        int pos_u, pos_d;
+    };
+
+    int GROUP_NUMS;
+    Input &input;
+    std::vector<GroupInfo> infos;
+
+    void construct_group_info() {
+        int idx = 0;
+        for(int y : range(0, input.N)) {
+            for(int x : range(0, input.N, GROUP_SIZE)) {
+                GroupInfo info = {
+                    .idx = idx,
+                    .pos_l = x,
+                    .pos_r = x + GROUP_SIZE,
+                    .pos_u = y,
+                    .pos_d = y + 1,
+                };
+                infos.push_back(info);
+                idx++;
+            }
+        }
+        GROUP_NUMS = (int)infos.size();
+    }
+
+    ColorGroupManagerForMinimumTrun(Input &input_) : input(input_) {
+        construct_group_info();
+    }
+
+    GroupInfo get_info(int idx) {
+        assert(0 <= idx && idx < GROUP_NUMS);
+        return infos[idx];
+    }
+
+    Action get_add_paint_action(int idx, int k) const {
+        assert(0 <= idx && idx < GROUP_NUMS);
+        auto &info = infos[idx];
+        int y = info.pos_u;
+        int x = info.pos_l;
+        return Action::Add(y, x, k);
+    }
+
+    Action get_deliver_paint_action(int idx) const {
+        assert(0 <= idx && idx < GROUP_NUMS);
+        auto &info = infos[idx];
+        int y = info.pos_u;
+        int x = info.pos_l;
+        return Action::Deliver(y, x);
+    }
+
+    Paint get_paint(int idx, State &state) const {
+        assert(0 <= idx && idx < GROUP_NUMS);
+        auto &info = infos[idx];
+        int y = info.pos_u;
+        int x = info.pos_l;
+        auto paint = state.get_paint(y, x);
+        return paint;
+    }
+
+    Wall struct_init_wall() {
+        vector<vector<bool>> wall_h(input.N - 1, vector<bool>(input.N, true));
+        vector<vector<bool>> wall_v(input.N, vector<bool>(input.N - 1, false));
+
+        for(const auto &info : infos) {
+            if(info.pos_l > 0) {
+                int y = info.pos_u;
+                int x = info.pos_l - 1;
+                wall_v[y][x] = true;
+            }
+        }
+
+        return Wall(wall_h, wall_v);
+    }
+};
+
+class PolicyGreedyForMinimumTrun {
+  public:
+    struct ImmediateInfo {
+        int idx = -1;
+        int discard_cnt;
+        vector<int> add_indices;
+    };
+
+    Input &input;
+    State &state;
+    GreedyMixer &greedy_mixer;
+    ColorGroupManagerForMinimumTrun &color_group_manager;
+
+    PolicyGreedyForMinimumTrun(Input &input_, State &state_, GreedyMixer &greedy_mixer_, ColorGroupManagerForMinimumTrun &color_group_manager_)
+        : input(input_), state(state_), greedy_mixer(greedy_mixer_), color_group_manager(color_group_manager_) {
+    }
+
+    double eval_cost(double err, int add_cnt, int discard_cnt) {
+        double err_cost = err * 1e4;
+        int total_add_cnt = this->state.add_cnt + add_cnt;
+        if(total_add_cnt > input.H) {
+            double add_cost = (total_add_cnt - input.H) * (double)(this->input.D);
+            return err_cost + add_cost;
+        } else {
+            double discard_cost = (double)(input.D) * (double)(discard_cnt);
+            return err_cost + discard_cost;
+        }
+    }
+
+    double eval_cost(Color &mixed, int add_cnt, int discard_cnt) {
+        double err = eval_error(mixed, input.target[state.deliver_cnt]);
+        return eval_cost(err, add_cnt, discard_cnt);
+    }
+
+    pair<double, ImmediateInfo> roop_idx(int idx, int max_turn) {
+        double best_cost = 1e18;
+        ImmediateInfo best_info;
+
+        auto paint = color_group_manager.get_paint(idx, state);
+
+        // 追加なし
+        if(paint.vol > 1.0 - 1e-6) {
+            ImmediateInfo info = {
+                .idx = idx,
+                .discard_cnt = 0,
+                .add_indices = {},
+            };
+            double cost = eval_cost(paint.color, 0, 0);
+            if(cost < best_cost) {
+                best_cost = cost;
+                best_info = info;
+            }
+        }
+
+        int now_vol = (int)paint.vol;
+
+        // 全廃棄する場合（ターン数が足りない場合は全廃棄できない）
+        // TODO: ループの外に出す
+        if(now_vol < max_turn) {
+            int remain_turn = min(max_turn - now_vol, greedy_mixer.get_color_max());
+            auto ret = greedy_mixer.get_greedy_result(state.deliver_cnt, remain_turn);
+            ImmediateInfo info = {
+                .idx = idx,
+                .discard_cnt = now_vol,
+                .add_indices = ret.indices,
+            };
+            double cost = this->eval_cost(ret.err, (int)ret.indices.size(), now_vol);
+            if(cost < best_cost) {
+                best_cost = cost;
+                best_info = info;
+            }
+        }
+
+        // 廃棄と追加の組み合わせ
+        int max_discard_cnt = min(max_turn - 1, (int)paint.vol - 1);
+        for(int discard_cnt : range(0, max_discard_cnt + 1)) {
+            int max_add_cnt = min(max_turn - discard_cnt, greedy_mixer.get_color_max());
+            max_add_cnt = min(max_add_cnt, GROUP_SIZE - (int)paint.vol);
+            for(int add_cnt : range(1, max_add_cnt + 1)) {
+                int max_comb = greedy_mixer.mixed_colors_cache[add_cnt].size();
+                for(int comb_ind : range(max_comb)) {
+                    vector<double> vols = {paint.vol - discard_cnt};
+                    vector<Color> colors = {paint.color};
+                    vols.push_back((double)add_cnt);
+                    auto &c = greedy_mixer.mixed_colors_cache[add_cnt][comb_ind];
+                    colors.push_back(c);
+                    auto &inds = greedy_mixer.mixed_colors_inds_cache[add_cnt][comb_ind];
+                    Color mixed_color = mix(vols, colors);
+                    double cost = eval_cost(mixed_color, add_cnt, discard_cnt);
+                    ImmediateInfo info = {
+                        .idx = idx,
+                        .discard_cnt = discard_cnt,
+                        .add_indices = inds,
+                    };
+                    if(cost < best_cost) {
+                        best_cost = cost;
+                        best_info = info;
+                    }
+                }
+            }
+        }
+
+        return {best_cost, best_info};
+    }
+
+    vector<Action> create_action(ImmediateInfo &info) {
+        vector<Action> actions;
+        auto group_info = color_group_manager.get_info(info.idx);
+        int y = group_info.pos_u;
+        int x = group_info.pos_l;
+        for(int i : range(info.discard_cnt)) {
+            actions.push_back(Action::Discard(y, x));
+        }
+        for(int i : info.add_indices) {
+            actions.push_back(Action::Add(y, x, i));
+        }
+        actions.push_back(Action::Deliver(y, x));
+        return actions;
+    }
+
+    vector<Action> dicision_action() {
+        double best_cost = 1e18;
+        ImmediateInfo best_info;
+
+        int remain_deliver = input.H - state.deliver_cnt;
+        int remain_turn = input.T - BUFFER_TURN - state.turn;
+        double obj_turn = (double)remain_turn / (double)remain_deliver;
+        assert(obj_turn > 2.0);
+
+        for(int idx : range(color_group_manager.GROUP_NUMS)) {
+            auto [cost, info] = roop_idx(idx, (int)obj_turn - 1); // deliver分は先回りして減らす
+            if(cost < best_cost) {
+                best_cost = cost;
+                best_info = info;
+            }
+        }
+
+        assert(best_info.idx != -1);
+        int pred_turn = best_info.discard_cnt + (int)best_info.add_indices.size() + 1;
+
+        assert(pred_turn <= (int)obj_turn);
+        auto actions = create_action(best_info);
+        return actions;
+    }
+};
+
+pair<Output, State> solve_greedy(Input &input) {
+    ColorGroupManagerForMinimumTrun color_group_manager_min_turn(input);
+    auto init_wall = color_group_manager_min_turn.struct_init_wall();
+    State state(init_wall, input);
+    GreedyMixer mixer(input, GREEDY_COLOR_MAX);
+    PolicyGreedyForMinimumTrun policy_greedy_for_min_turn(input, state, mixer, color_group_manager_min_turn);
+
+    try {
+        // Main Loop
+        for(int h : range(input.H)) {
+            if(h % 10 == 0 || h >= 990) state.print_info();
+            auto best_act = policy_greedy_for_min_turn.dicision_action();
+            state.apply_actions(best_act);
+        }
+        state.print_info();
+    } catch(const exception &e) {
+        Output output = Output{init_wall, state.actions};
+        print_output(output);
+        cerr << "Exception: " << e.what() << "\n";
+        exit(1);
+    }
+
+    Output output = Output{init_wall, state.actions};
+    return {output, state};
+}
+
+// ============================================================================
+// 共通
+// ============================================================================
+
+void solve() {
+    TimeKeeper time_keeper(MAX_TIME);
+    Input input = parse_input();
+
+    // !!!DEBUG
+    if(!(4000 <= input.T && input.T <= 8000)) {
+        exit(1);
+    }
+
+    State state;
+    Output output;
+    if(input.T <= 11000) {
+        tie(output, state) = solve_greedy(input);
+    } else {
+        tie(output, state) = solve_fractor(input, time_keeper);
+    }
+
     cerr << boost::format("K: %d, T:%d, D:%d") % input.K % input.T % input.D << "\n";
     cerr << boost::format("score: %d, elapsed: %f, turn: %d/%d") % get<2>(state.get_score()) % time_keeper.getElapsedTime() % state.turn % input.T << "\n";
 
     // output
-    Output output = Output{init_wall, state.actions};
-    print_output(output);
+    if(IS_DEBUG) {
+        cout << boost::format("%d %d") % get<2>(state.get_score()) % state.turn << "\n";
+    } else {
+        print_output(output);
+    }
 }
 
 int main() {

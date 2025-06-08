@@ -188,6 +188,8 @@ struct State {
     int deliver_cnt = 0;
     int discard_cnt = 0;
 
+    State() = default;
+
     State(const Wall &init_wall, const Input &input) {
         this->input = input;
         this->wall = init_wall;
@@ -336,12 +338,16 @@ struct State {
         }
     }
 
-    void debug() {
-        for(const auto &paint : this->paints) {
-            if(paint.vol < 1e-6) continue; // 1g未満は表示しない
-            cerr << boost::format("ID: %d, Cap: %d, Vol: %.2f, Color: (%.2f, %.2f, %.2f)") % paint.id % paint.cap % paint.vol % paint.color[0] %
-                        paint.color[1] % paint.color[2]
-                 << endl;
+    void apply_actions(vector<Action> actions) {
+        for(const auto &act : actions) {
+            this->apply(act);
         }
+    }
+
+    void print_info() {
+        auto [deliver_cost, err_cost, total_cost] = get_score();
+        cerr << boost::format("H: %4d | Turn: %5d/%5d | Add: %4d | Discard: %4d (%5d loss) | Score: %5d (add: %5d, err: %5d)") % deliver_cnt % turn % input.T %
+                    add_cnt % discard_cnt % int(discard * 1e4) % total_cost % deliver_cost % err_cost
+             << "\n";
     }
 };

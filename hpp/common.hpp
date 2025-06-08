@@ -16,6 +16,13 @@ using namespace std;
 #define cpp_dump(...) ;
 #endif
 
+// DEBUG用のマクロ
+#ifdef DEBUG
+#define IS_DEBUG true
+#else
+#define IS_DEBUG false
+#endif
+
 using ll = long long;
 using Color = array<double, 3>;
 using Fractor = pair<int, int>;

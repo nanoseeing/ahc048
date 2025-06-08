@@ -316,15 +316,6 @@ void cartesian_product(const std::vector<std::vector<T>> &vectors, Func callback
     }
 }
 
-double exponential_schedule(double init, double obj, double elapsed_time, double max_time) {
-    double lambda_param = log(obj / init) / max_time;
-    return init * exp(lambda_param * elapsed_time);
-}
-
-double linear_schedule(double init, double obj, double elapsed_time, double max_time) {
-    return init + (obj - init) * (elapsed_time / max_time);
-}
-
 pair<int, int> reduce_fraction(pair<int, int> frac) {
     int num = frac.first;
     int den = frac.second;
@@ -368,38 +359,20 @@ void reorder_vector(std::vector<T> &vec, const std::vector<size_t> &indices) {
     vec = std::move(reordered);
 }
 
-void choose_front(int start, int needed, int m, std::vector<int> &sel, std::vector<std::vector<int>> &result_list) {
-    if(needed == 0) {
-        std::vector<int> full = sel;
-        full.push_back(m);
-        result_list.push_back(full);
-        return;
-    }
-
-    for(int i = start; i <= m - needed; ++i) {
-        sel.push_back(i);
-        choose_front(i + 1, needed - 1, m, sel, result_list);
-        sel.pop_back();
-    }
-}
-
-vector<vector<int>> choose_nCk(const int N, const int K, int max_comb = 10000) {
-    std::vector<int> buffer;
-    std::vector<std::vector<int>> tmp;
-    vector<vector<int>> comb_list;
-    for(int m = K - 1; m < N; ++m) {
-        tmp.clear();
-        buffer.clear();
-        choose_front(0, K - 1, m, buffer, tmp);
-        for(auto &comb : tmp) {
-            if((int)comb_list.size() >= max_comb) {
-                return comb_list;
-            }
-            comb_list.push_back(comb);
+vector<vector<int>> construct_subsets(int size, int k) {
+    vector<vector<int>> subsets;
+    vector<int> comb(size);
+    function<void(int, int)> dfs = [&](int start, int depth) {
+        if(depth == size) {
+            subsets.emplace_back(comb.begin(), comb.end());
+            return;
         }
-    }
+        for(int x = start; x < k; x++) {
+            comb[depth] = x;
+            dfs(x + 1, depth + 1);
+        }
+    };
+    dfs(0, 0);
 
-    return comb_list;
+    return subsets;
 }
-
-Xorshift64 xor_rng;
