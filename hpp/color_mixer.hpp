@@ -66,7 +66,7 @@ class ColorMixer {
 
     static constexpr double EPS = 1e-7;
     static constexpr int MAX_ITER = 30;
-    static constexpr int FIND_TOP_N = 100;
+    static constexpr int FIND_TOP_N = 200;
     static constexpr int SUBSET_NUM_THRESHOLD = 400; // 20C2 = 190, 20C3 = 1140, 20C4 = 4845
     static constexpr int GREEDY_COLOR_MIN = 1;       // greedyで混合する最小色数
     static constexpr int GREEDY_COLOR_MAX = 5;       // greedyで混合する最大色数

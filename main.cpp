@@ -20,9 +20,9 @@ pair<Output, State> solve_fractor(Input &input, TimeKeeper &time_keeper) {
     State state(init_wall, input);
     ColorMixer mixer(input);
 
+    Planner planner(input, state, mixer);
     PolicyGreedy policy_greedy(input, state, mixer);
     PolicyFractor policy_fractor(input, state, mixer, color_group_manager, fractor_manager, time_keeper);
-    Planner planner(input, state, mixer);
 
     int policy_greedy_cnt = 0;
     double policy_err_sum = 0.0;

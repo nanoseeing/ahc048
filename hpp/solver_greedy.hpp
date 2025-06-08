@@ -16,6 +16,7 @@ const int GROUP_SIZE = 4;
 
 class ColorGroupManagerForMinimumTrun {
   public:
+    static constexpr int MAX_Y = 20;
     struct GroupInfo {
         int idx;
         int pos_l, pos_r;
@@ -28,7 +29,7 @@ class ColorGroupManagerForMinimumTrun {
 
     void construct_group_info() {
         int idx = 0;
-        for(int y : range(0, input.N)) {
+        for(int y : range(0, MAX_Y)) {
             for(int x : range(0, input.N, GROUP_SIZE)) {
                 GroupInfo info = {
                     .idx = idx,

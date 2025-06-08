@@ -30,6 +30,3 @@ using Fractors = vector<Fractor>;
 
 #define ALL(obj)  (obj).begin(), (obj).end()
 #define RALL(obj) (obj).rbegin(), (obj).rend()
-
-const double MAX_TIME = 2800.0;
-const int BUFFER_TURN = 10; // 念のためバッファを持たせる
