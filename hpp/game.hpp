@@ -13,6 +13,12 @@ const int BUFFER_TURN = 10; // 念のためバッファを持たせる
 // Game
 // =========================================================
 
+struct Paint {
+    int id;
+    int cap;
+    double vol;
+    Color color;
+};
 struct Input {
     int N, K, H, T, D;
     vector<Color> own;
@@ -21,6 +27,14 @@ struct Input {
 
 double eval_error(Color col, Color tgt) {
     return sqrt(pow(col[0] - tgt[0], 2) + pow(col[1] - tgt[1], 2) + pow(col[2] - tgt[2], 2));
+}
+
+Paint half_mix(Paint &p1, Paint &p2) {
+    double sum_vol = p1.vol + p2.vol;
+    if(sum_vol <= 0) return {0, 0, 0.0, {0.0, 0.0, 0.0}};
+    Color mixed_color = {(p1.vol * p1.color[0] + p2.vol * p2.color[0]) / sum_vol, (p1.vol * p1.color[1] + p2.vol * p2.color[1]) / sum_vol,
+                         (p1.vol * p1.color[2] + p2.vol * p2.color[2]) / sum_vol};
+    return {p1.id, min(p1.cap, p2.cap), sum_vol / 2.0, mixed_color};
 }
 
 Color mix(double v1, Color c1, double v2, Color c2) {
@@ -170,13 +184,6 @@ tuple<int, vector<vector<int>>, vector<int>> get_ids(Wall &wall) {
 
     return {ID, ids, caps};
 }
-
-struct Paint {
-    int id;
-    int cap;
-    double vol;
-    Color color;
-};
 
 struct State {
     Input input;

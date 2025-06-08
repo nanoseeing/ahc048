@@ -13,6 +13,7 @@
 // Greedy関連の定義
 const int GREEDY_COLOR_MAX = 4;
 const int GROUP_SIZE = 4;
+const int ROW_NUM = 20 / GROUP_SIZE;
 
 class ColorGroupManagerForMinimumTrun {
   public:
@@ -54,6 +55,25 @@ class ColorGroupManagerForMinimumTrun {
         return infos[idx];
     }
 
+    Action get_toggle_action(int idx1, int idx2) {
+        assert(0 <= idx1 && idx1 < GROUP_NUMS);
+        assert(0 <= idx2 && idx2 < GROUP_NUMS);
+        int i1 = min(idx1, idx2);
+        int i2 = max(idx1, idx2);
+        auto &info1 = infos[i1];
+        auto &info2 = infos[i2];
+        if(i1 + 1 == i2) {
+            int x = info1.pos_r;
+            int y = info1.pos_u;
+            return Action::Toggle(y, x - 1, y, x);
+        } else if(i1 + ROW_NUM == i2) {
+            int y = info1.pos_u;
+            int x = info1.pos_l;
+            return Action::Toggle(y, x, y + 1, x);
+        } else {
+            throw runtime_error("Invalid toggle action indices");
+        }
+    }
     Action get_add_paint_action(int idx, int k) const {
         assert(0 <= idx && idx < GROUP_NUMS);
         auto &info = infos[idx];
@@ -101,6 +121,10 @@ class PolicyGreedyForMinimumTrun {
         int idx = -1;
         int discard_cnt;
         vector<int> add_indices;
+        bool toggle_left = false;
+        bool toggle_right = false;
+        bool toggle_up = false;
+        bool toggle_down = false;
     };
 
     Input &input;
@@ -135,7 +159,7 @@ class PolicyGreedyForMinimumTrun {
 
         auto paint = color_group_manager.get_paint(idx, state);
 
-        // 追加なし
+        // そのまま取り出す
         if(paint.vol > 1.0 - 1e-6) {
             ImmediateInfo info = {
                 .idx = idx,
@@ -149,18 +173,17 @@ class PolicyGreedyForMinimumTrun {
             }
         }
 
-        int now_vol = (int)paint.vol;
-
         // 全廃棄する場合（ターン数が足りない場合は全廃棄できない）
         // TODO: ループの外に出す
-        if(now_vol < max_turn) {
-            int remain_turn = min(max_turn - now_vol, greedy_mixer.get_color_max());
+        int now_vol = (int)paint.vol;
+        int vol_ceil = ceil(paint.vol);
+        if(vol_ceil < max_turn) {
+            int remain_turn = min(max_turn - vol_ceil, greedy_mixer.get_color_max());
             auto ret = greedy_mixer.get_greedy_result(state.deliver_cnt, remain_turn);
-            ImmediateInfo info = {
-                .idx = idx,
-                .discard_cnt = now_vol,
-                .add_indices = ret.indices,
-            };
+            ImmediateInfo info;
+            info.idx = idx;
+            info.discard_cnt = vol_ceil;
+            info.add_indices = ret.indices;
             double cost = this->eval_cost(ret.err, (int)ret.indices.size(), now_vol);
             if(cost < best_cost) {
                 best_cost = cost;
@@ -197,6 +220,72 @@ class PolicyGreedyForMinimumTrun {
             }
         }
 
+        // // 仕切りの組み合わせ
+        // for(int i : {0, 1, 2, 4, 8}) {
+        //     bool is_left = (i & 1);
+        //     bool is_right = (i & 2);
+        //     bool is_up = (i & 4);
+        //     bool is_down = (i & 8);
+        //     int toggle_cnt = is_left + is_right + is_up + is_down;
+        //     if(toggle_cnt * 2 > max_turn) continue;
+        //     if(color_group_manager.infos[idx].pos_l == 0 && is_left) continue;        // 左端は左に動かせない
+        //     if(color_group_manager.infos[idx].pos_r == input.N && is_right) continue; // 右端は右に動かせない
+        //     if(color_group_manager.infos[idx].pos_u == 0 && is_up) continue;          // 上端は上に動かせない
+        //     if(color_group_manager.infos[idx].pos_d == input.N && is_down) continue;  // 下端は下に動かせない
+        //     auto now_paint = paint;
+        //     if(is_left) {
+        //         auto left_paint = color_group_manager.get_paint(idx - 1, state);
+        //         now_paint = half_mix(now_paint, left_paint);
+        //     }
+        //     if(is_right) {
+        //         auto right_paint = color_group_manager.get_paint(idx + 1, state);
+        //         now_paint = half_mix(now_paint, right_paint);
+        //     }
+        //     if(is_up) {
+        //         auto up_paint = color_group_manager.get_paint(idx - ROW_NUM, state);
+        //         now_paint = half_mix(now_paint, up_paint);
+        //     }
+        //     if(is_down) {
+        //         auto down_paint = color_group_manager.get_paint(idx + ROW_NUM, state);
+        //         now_paint = half_mix(now_paint, down_paint);
+        //     }
+        //     int remain_turn = max_turn - toggle_cnt * 2;
+        //     if(remain_turn == 0 && now_vol < 1.0 - 1e-6) continue;
+
+        //     // 廃棄と追加の組み合わせ
+        //     int max_discard_cnt = min(remain_turn, (int)now_paint.vol);
+        //     for(int discard_cnt : range(0, max_discard_cnt + 1)) {
+        //         int max_add_cnt = min(remain_turn - discard_cnt, greedy_mixer.get_color_max());
+        //         max_add_cnt = min(max_add_cnt, GROUP_SIZE - int(ceil(now_paint.vol)));
+        //         for(int add_cnt : range(1, max_add_cnt + 1)) {
+        //             int max_comb = greedy_mixer.mixed_colors_cache[add_cnt].size();
+        //             for(int comb_ind : range(max_comb)) {
+        //                 vector<double> vols = {now_paint.vol - discard_cnt};
+        //                 vector<Color> colors = {now_paint.color};
+        //                 vols.push_back((double)add_cnt);
+        //                 auto &c = greedy_mixer.mixed_colors_cache[add_cnt][comb_ind];
+        //                 colors.push_back(c);
+        //                 auto &inds = greedy_mixer.mixed_colors_inds_cache[add_cnt][comb_ind];
+        //                 Color mixed_color = mix(vols, colors);
+        //                 double cost = eval_cost(mixed_color, add_cnt, discard_cnt);
+        //                 ImmediateInfo info = {
+        //                     .idx = idx,
+        //                     .discard_cnt = discard_cnt,
+        //                     .add_indices = inds,
+        //                     .toggle_left = is_left,
+        //                     .toggle_right = is_right,
+        //                     .toggle_up = is_up,
+        //                     .toggle_down = is_down,
+        //                 };
+        //                 if(cost < best_cost) {
+        //                     best_cost = cost;
+        //                     best_info = info;
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+
         return {best_cost, best_info};
     }
 
@@ -205,6 +294,22 @@ class PolicyGreedyForMinimumTrun {
         auto group_info = color_group_manager.get_info(info.idx);
         int y = group_info.pos_u;
         int x = group_info.pos_l;
+        if(info.toggle_left) {
+            actions.push_back(color_group_manager.get_toggle_action(info.idx, info.idx - 1));
+            actions.push_back(color_group_manager.get_toggle_action(info.idx, info.idx - 1));
+        }
+        if(info.toggle_right) {
+            actions.push_back(color_group_manager.get_toggle_action(info.idx, info.idx + 1));
+            actions.push_back(color_group_manager.get_toggle_action(info.idx, info.idx + 1));
+        }
+        if(info.toggle_up) {
+            actions.push_back(color_group_manager.get_toggle_action(info.idx, info.idx - ROW_NUM));
+            actions.push_back(color_group_manager.get_toggle_action(info.idx, info.idx - ROW_NUM));
+        }
+        if(info.toggle_down) {
+            actions.push_back(color_group_manager.get_toggle_action(info.idx, info.idx + ROW_NUM));
+            actions.push_back(color_group_manager.get_toggle_action(info.idx, info.idx + ROW_NUM));
+        }
         for(int i : range(info.discard_cnt)) {
             actions.push_back(Action::Discard(y, x));
         }

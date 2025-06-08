@@ -105,7 +105,7 @@ void solve() {
 
     State state;
     Output output;
-    if(input.T <= 11000) {
+    if(input.T <= 64000) {
         tie(output, state) = solve_greedy(input);
     } else {
         tie(output, state) = solve_fractor(input, time_keeper);

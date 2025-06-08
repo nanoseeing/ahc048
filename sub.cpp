@@ -949,6 +949,11 @@ const int BUFFER_TURN = 10; // 念のためバッファを持たせる
 // =========================================================
 // Game
 // =========================================================
+struct PolicyItem {
+    int policy_id; // 0: greedy, 1: fract
+    int comb_size;
+    int limit_turn; // このターン数までに抑えること
+};
 
 struct Input {
     int N, K, H, T, D;
@@ -1750,6 +1755,8 @@ const int GROUP_SIZE = 4;
 
 class ColorGroupManagerForMinimumTrun {
   public:
+    static constexpr int START_Y = 19;
+    static constexpr int MAX_Y = 20;
     struct GroupInfo {
         int idx;
         int pos_l, pos_r;
@@ -1762,7 +1769,7 @@ class ColorGroupManagerForMinimumTrun {
 
     void construct_group_info() {
         int idx = 0;
-        for(int y : range(0, input.N)) {
+        for(int y : range(START_Y, MAX_Y)) {
             for(int x : range(0, input.N, GROUP_SIZE)) {
                 GroupInfo info = {
                     .idx = idx,
@@ -1812,19 +1819,28 @@ class ColorGroupManagerForMinimumTrun {
         return paint;
     }
 
-    Wall struct_init_wall() {
-        vector<vector<bool>> wall_h(input.N - 1, vector<bool>(input.N, true));
-        vector<vector<bool>> wall_v(input.N, vector<bool>(input.N - 1, false));
+    Wall update_wall(Wall &init_wall) {
+        if(START_Y != 0) {
+            for(int x : range(0, input.N)) {
+                init_wall.wall_h[START_Y - 1][x] = true;
+            }
+        }
+
+        for(int y : range(START_Y, max(MAX_Y, 19))) {
+            for(int x : range(0, input.N)) {
+                init_wall.wall_h[y][x] = true;
+            }
+        }
 
         for(const auto &info : infos) {
             if(info.pos_l > 0) {
                 int y = info.pos_u;
                 int x = info.pos_l - 1;
-                wall_v[y][x] = true;
+                init_wall.wall_v[y][x] = true;
             }
         }
 
-        return Wall(wall_h, wall_v);
+        return init_wall;
     }
 };
 
@@ -1948,13 +1964,11 @@ class PolicyGreedyForMinimumTrun {
         return actions;
     }
 
-    vector<Action> dicision_action() {
+    vector<Action> dicision_action(PolicyItem &policy_item) {
         double best_cost = 1e18;
         ImmediateInfo best_info;
 
-        int remain_deliver = input.H - state.deliver_cnt;
-        int remain_turn = input.T - BUFFER_TURN - state.turn;
-        double obj_turn = (double)remain_turn / (double)remain_deliver;
+        int obj_turn = policy_item.limit_turn - state.turn;
         assert(obj_turn > 2.0);
 
         for(int idx : range(color_group_manager.GROUP_NUMS)) {
@@ -2009,23 +2023,23 @@ class ColorGroupManager {
         int size;
     };
 
-    int n;
+    int N_ROW;
+    int N_COL;
     int k;
-    int original_k;
     int init_pos;
     std::vector<GroupInfo> infos;
 
     std::vector<std::pair<int, int>> create_root(int x, int row_num) {
         std::vector<std::pair<int, int>> roots;
-        roots.emplace_back(n - 1, x);
+        roots.emplace_back(N_ROW - 1, x);
 
         for(int r = 0; r < row_num; ++r) {
             if(r % 2 == 0) {
-                for(int i = n - 2; i >= 0; --i) {
+                for(int i = N_ROW - 2; i >= 0; --i) {
                     roots.emplace_back(i, x + r);
                 }
             } else {
-                for(int i = 0; i < n - 1; ++i) {
+                for(int i = 0; i < N_ROW - 1; ++i) {
                     roots.emplace_back(i, x + r);
                 }
             }
@@ -2037,7 +2051,7 @@ class ColorGroupManager {
 
     std::vector<GroupInfo> construct_group_info() {
         std::vector<int> num_list(k, 1);
-        for(int i = 0; i < n - k; ++i) {
+        for(int i = 0; i < N_COL - k; ++i) {
             num_list[0] += 1;
             std::sort(num_list.begin(), num_list.end());
         }
@@ -2068,7 +2082,7 @@ class ColorGroupManager {
     }
 
   public:
-    ColorGroupManager(int n_, int k_, int original_k_, int init_pos_ = 2) : n(n_), k(k_), original_k(original_k_), init_pos(init_pos_) {
+    ColorGroupManager(int n_row, int n_col, int k_, int init_pos_ = 2) : N_ROW(n_row), N_COL(n_col), k(k_), init_pos(init_pos_) {
         infos = construct_group_info();
     }
 
@@ -2116,7 +2130,7 @@ class ColorGroupManager {
 
     Action get_add_paint_action(int k_index) const {
         auto [y, x] = infos[k_index].roots[0];
-        return Action::Add(y, x, k_index % this->original_k);
+        return Action::Add(y, x, k_index % this->k);
     }
 
     Action get_deliver_paint_action(int k_index) const {
@@ -2302,11 +2316,6 @@ class Planner {
     static constexpr int MAX_TURN = 19005;       // (4 * 4 + 3 = 19) * 1000 = 19000
     static constexpr int FINAL_TURN_BUFFER = 20; // 最後の方に帳尻合わせをしたい。
     static constexpr int JUDGE_FINALY_TURN = 995;
-    struct PolicyItem {
-        int policy_id; // 0: greedy, 1: fract
-        int comb_size;
-        int limit_turn; // このターン数までに抑えること
-    };
 
     struct TmpResult {
         double cost;
@@ -2664,7 +2673,7 @@ class PolicyFractor {
         return {best_cost, best_info};
     }
 
-    pair<double, vector<ImmediateInfo>> ordinaly_turn(Planner::PolicyItem &policy_item) {
+    pair<double, vector<ImmediateInfo>> ordinaly_turn(PolicyItem &policy_item) {
         // =====================================================================
         // 通常ターンはPolicyにしたがって行動を決定する
         // =====================================================================
@@ -2709,7 +2718,7 @@ class PolicyFractor {
         return {best_cost, best_info};
     }
 
-    pair<double, vector<ImmediateInfo>> nealy_final_turn(Planner::PolicyItem &policy_item) {
+    pair<double, vector<ImmediateInfo>> nealy_final_turn(PolicyItem &policy_item) {
         // =====================================================================
         // 最後の方は全パターン試す
         // =====================================================================
@@ -2749,7 +2758,7 @@ class PolicyFractor {
         return {best_cost, best_info};
     }
 
-    pair<double, vector<ImmediateInfo>> with_upperbound(Planner::PolicyItem &policy_item) {
+    pair<double, vector<ImmediateInfo>> with_upperbound(PolicyItem &policy_item) {
         double best_cost = 1e9;
         vector<ImmediateInfo> best_info;
 
@@ -2776,7 +2785,7 @@ class PolicyFractor {
         return {best_cost, best_info};
     }
 
-    DicisionAction dicision_action(Planner::PolicyItem &policy_item) {
+    DicisionAction dicision_action(PolicyItem &policy_item) {
         // TODO 時間に応じてMAX_SEARCH_NUMを調整したい
 
         double best_cost = 1e9;
@@ -2800,33 +2809,6 @@ class PolicyFractor {
     }
 };
 
-class PolicyGreedy {
-  public:
-    Input &input;
-    State &state;
-    ColorMixer &color_mixer;
-    vector<Color> mix_cache;
-
-    PolicyGreedy(Input &input_, State &state_, ColorMixer &color_mixer_) : input(input_), state(state_), color_mixer(color_mixer_) {
-    }
-
-    DicisionAction dicision_action(Planner::PolicyItem &policy_item) {
-        auto result = color_mixer.get_greedy_result(state.deliver_cnt, policy_item.comb_size);
-        vector<Action> actions;
-        for(const auto &k : result.indices) {
-            actions.push_back(Action::Add(input.N - 1, 0, k));
-        }
-
-        int total_add_cnt = state.add_cnt + policy_item.comb_size;
-
-        DicisionAction action_result;
-        action_result.pre_actions = actions;
-        action_result.cost = result.cost;
-        action_result.change_color_num = 99; // TODO: 特に意味がない値
-        return action_result;
-    }
-};
-
 void apply_actions(DicisionAction &dicision_act, State &state, Input &input, bool is_end) {
     for(const auto &act : dicision_act.pre_actions) {
         state.apply(act);
@@ -2844,28 +2826,32 @@ void apply_actions(DicisionAction &dicision_act, State &state, Input &input, boo
     for(const auto &act : dicision_act.post_actions) {
         state.apply(act);
     }
-}
-// Skipped: utils.hpp already included
+}// Skipped: utils.hpp already included
 
 // ============================================================================
 // 共通
 // ============================================================================
 
 pair<Output, State> solve_fractor(Input &input, TimeKeeper &time_keeper) {
-    ColorGroupManager color_group_manager(input.N, input.K, input.K, INIT_PARTITION_POS);
+    ColorGroupManager color_group_manager(input.N - 1, input.N, input.K, INIT_PARTITION_POS);
     auto unique_sizes_ = color_group_manager.get_unique_sizes();
 
     FractorManager fractor_manager(unique_sizes_);
     auto init_wall = color_group_manager.struct_init_wall(input);
-    State state(init_wall, input);
-    ColorMixer mixer(input);
 
+    ColorGroupManagerForMinimumTrun color_group_manager_min_turn(input);
+    init_wall = color_group_manager_min_turn.update_wall(init_wall);
+
+    GreedyMixer greedy_mixer(input, GREEDY_COLOR_MAX);
+
+    State state(init_wall, input);
+    PolicyGreedyForMinimumTrun policy_greedy_for_min_turn(input, state, greedy_mixer, color_group_manager_min_turn);
+
+    ColorMixer mixer(input);
     Planner planner(input, state, mixer);
-    PolicyGreedy policy_greedy(input, state, mixer);
     PolicyFractor policy_fractor(input, state, mixer, color_group_manager, fractor_manager, time_keeper);
 
     int policy_greedy_cnt = 0;
-    double policy_err_sum = 0.0;
     map<int, int> act_cnt;
     map<int, int> color_cnt;
 
@@ -2875,19 +2861,15 @@ pair<Output, State> solve_fractor(Input &input, TimeKeeper &time_keeper) {
             if(h % 10 == 0 || h >= 990) state.print_info();
             auto policy = planner.get_policy(h);
 
-            DicisionAction best_act;
             if(policy.policy_id == 0) {
-                best_act = policy_greedy.dicision_action(policy);
+                auto best_act = policy_greedy_for_min_turn.dicision_action(policy);
+                state.apply_actions(best_act);
                 policy_greedy_cnt++;
-                policy_err_sum += best_act.cost;
             } else {
-                best_act = policy_fractor.dicision_action(policy);
+                auto best_act = policy_fractor.dicision_action(policy);
+                apply_actions(best_act, state, input, (state.deliver_cnt + 1) == input.H);
+                color_group_manager.apply_reserved_changes(best_act.reserved_changes);
             }
-            apply_actions(best_act, state, input, (state.deliver_cnt + 1) == input.H);
-            color_group_manager.apply_reserved_changes(best_act.reserved_changes);
-
-            act_cnt[best_act.change_color_num] += best_act.act_cnt;
-            color_cnt[best_act.change_color_num]++;
         }
         state.print_info();
     } catch(const exception &e) {
@@ -2899,7 +2881,7 @@ pair<Output, State> solve_fractor(Input &input, TimeKeeper &time_keeper) {
 
     // 情報
     if(policy_greedy_cnt > 0) {
-        cerr << boost::format("PolicyGreedy %d times. Error %d") % policy_greedy_cnt % (policy_err_sum) << "\n";
+        cerr << boost::format("PolicyGreedy %d times.") % policy_greedy_cnt << "\n";
     }
     for(const auto &p : act_cnt) {
         int color_num = p.first;
@@ -2913,44 +2895,10 @@ pair<Output, State> solve_fractor(Input &input, TimeKeeper &time_keeper) {
     return {output, state};
 }
 
-pair<Output, State> solve_greedy(Input &input) {
-    ColorGroupManagerForMinimumTrun color_group_manager_min_turn(input);
-    auto init_wall = color_group_manager_min_turn.struct_init_wall();
-    State state(init_wall, input);
-    GreedyMixer mixer(input, GREEDY_COLOR_MAX);
-    PolicyGreedyForMinimumTrun policy_greedy_for_min_turn(input, state, mixer, color_group_manager_min_turn);
-
-    try {
-        // Main Loop
-        for(int h : range(input.H)) {
-            if(h % 10 == 0 || h >= 990) state.print_info();
-            auto best_act = policy_greedy_for_min_turn.dicision_action();
-            state.apply_actions(best_act);
-        }
-        state.print_info();
-    } catch(const exception &e) {
-        Output output = Output{init_wall, state.actions};
-        print_output(output);
-        cerr << "Exception: " << e.what() << "\n";
-        exit(1);
-    }
-
-    Output output = Output{init_wall, state.actions};
-    return {output, state};
-}
-
 void solve() {
     TimeKeeper time_keeper(MAX_TIME);
     Input input = parse_input();
-
-    State state;
-    Output output;
-    if(input.T <= 11000) {
-        tie(output, state) = solve_greedy(input);
-    } else {
-        tie(output, state) = solve_fractor(input, time_keeper);
-    }
-
+    auto [output, state] = solve_fractor(input, time_keeper);
     cerr << boost::format("K: %d, T:%d, D:%d") % input.K % input.T % input.D << "\n";
     cerr << boost::format("score: %d, elapsed: %f, turn: %d/%d") % get<2>(state.get_score()) % time_keeper.getElapsedTime() % state.turn % input.T << "\n";
 
