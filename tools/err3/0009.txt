@@ -109,5 +109,5 @@ H:  998 | Turn:  2159/ 4323 | Add: 1081 | Discard:   80 (80.000 loss) | Score: 2
 H:  999 | Turn:  2161/ 4323 | Add: 1082 | Discard:   80 (80.000 loss) | Score: 200895 (add: 17928, err: 182966)
 H: 1000 | Turn:  2163/ 4323 | Add: 1083 | Discard:   80 (80.000 loss) | Score: 201270 (add: 17928, err: 183341)
 K: 4, T:4323, D:216
-score: 201270, elapsed: 40.095896, turn: 2163/4323
+score: 201270, elapsed: 34.964335, turn: 2163/4323
 201270 2163

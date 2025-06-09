@@ -106,14 +106,16 @@ H:  995 | Turn: 21297/21437 | Add:  996 | Discard:  965 (0.116 loss) | Score:  5
 H:  996 | Turn: 21332/21437 | Add:  997 | Discard:  966 (0.116 loss) | Score:  5299 (add:  4044, err:  1254)
 !!upper_vols_update
 !!upper_vols_update
-!!upper_vols_update
 H:  997 | Turn: 21361/21437 | Add: 1000 | Discard:  967 (0.116 loss) | Score: 13387 (add: 12132, err:  1254)
+!!upper_vols_update
+!!upper_vols_update
 H:  998 | Turn: 21384/21437 | Add: 1001 | Discard:  968 (0.116 loss) | Score: 13387 (add: 12132, err:  1254)
 H:  999 | Turn: 21394/21437 | Add: 1001 | Discard:  969 (0.118 loss) | Score: 10132 (add:  8088, err:  2043)
+!!upper_vols_update
 H: 1000 | Turn: 21406/21437 | Add: 1001 | Discard:  969 (0.118 loss) | Score:  8411 (add:  4044, err:  4366)
 color num: 2, call: 1, total: 12, avg: 12.000000
 color num: 3, call: 1, total: 8, avg: 8.000000
 color num: 4, call: 998, total: 19418, avg: 19.456914
 K: 5, T:21437, D:4044
-score: 8411, elapsed: 1054.275462, turn: 21406/21437
+score: 8411, elapsed: 1013.216222, turn: 21406/21437
 8411 21406

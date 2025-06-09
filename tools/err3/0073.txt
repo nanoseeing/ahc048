@@ -109,5 +109,5 @@ H:  998 | Turn:  2019/ 6102 | Add: 1013 | Discard:    8 (8.000 loss) | Score: 26
 H:  999 | Turn:  2020/ 6102 | Add: 1013 | Discard:    8 (8.000 loss) | Score: 269085 (add: 13650, err: 255434)
 H: 1000 | Turn:  2022/ 6102 | Add: 1014 | Discard:    8 (8.000 loss) | Score: 269822 (add: 13650, err: 256171)
 K: 17, T:6102, D:975
-score: 269822, elapsed: 704.160915, turn: 2022/6102
+score: 269822, elapsed: 672.331098, turn: 2022/6102
 269822 2022

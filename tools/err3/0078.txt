@@ -109,5 +109,5 @@ H:  998 | Turn:  2507/ 8178 | Add: 1342 | Discard:  167 (167.000 loss) | Score: 
 H:  999 | Turn:  2508/ 8178 | Add: 1342 | Discard:  167 (167.000 loss) | Score: 176547 (add: 32242, err: 144304)
 H: 1000 | Turn:  2510/ 8178 | Add: 1343 | Discard:  167 (167.000 loss) | Score: 176642 (add: 32242, err: 144399)
 K: 13, T:8178, D:94
-score: 176642, elapsed: 541.085791, turn: 2510/8178
+score: 176642, elapsed: 565.347857, turn: 2510/8178
 176642 2510

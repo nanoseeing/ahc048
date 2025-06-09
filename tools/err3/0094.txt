@@ -109,5 +109,5 @@ H:  998 | Turn:  2842/ 5549 | Add: 1424 | Discard:  420 (420.000 loss) | Score: 
 H:  999 | Turn:  2844/ 5549 | Add: 1425 | Discard:  420 (420.000 loss) | Score: 533932 (add: 25560, err: 508371)
 H: 1000 | Turn:  2848/ 5549 | Add: 1428 | Discard:  420 (420.000 loss) | Score: 535100 (add: 25680, err: 509419)
 K: 4, T:5549, D:60
-score: 535100, elapsed: 22.339976, turn: 2848/5549
+score: 535100, elapsed: 31.385377, turn: 2848/5549
 535100 2848

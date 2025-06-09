@@ -98,17 +98,35 @@ H:  960 | Turn: 24305/25351 | Add:  970 | Discard:  956 (0.953 loss) | Score:  2
 H:  970 | Turn: 24557/25351 | Add:  978 | Discard:  966 (0.959 loss) | Score:  1879 (add:   800, err:  1078)
 H:  980 | Turn: 24813/25351 | Add:  990 | Discard:  976 (0.970 loss) | Score:  2090 (add:  1000, err:  1089)
 H:  990 | Turn: 25065/25351 | Add: 1000 | Discard:  986 (0.989 loss) | Score:  2100 (add:  1000, err:  1099)
+!!upper_vols_update
 H:  991 | Turn: 25089/25351 | Add: 1000 | Discard:  987 (0.990 loss) | Score:  2001 (add:   900, err:  1100)
+!!upper_vols_update
 H:  992 | Turn: 25115/25351 | Add: 1000 | Discard:  988 (0.991 loss) | Score:  1901 (add:   800, err:  1100)
+!!upper_vols_update
 H:  993 | Turn: 25141/25351 | Add: 1000 | Discard:  989 (0.994 loss) | Score:  1802 (add:   700, err:  1101)
 H:  994 | Turn: 25168/25351 | Add: 1001 | Discard:  990 (0.996 loss) | Score:  1803 (add:   700, err:  1102)
 H:  995 | Turn: 25190/25351 | Add: 1001 | Discard:  991 (0.998 loss) | Score:  1705 (add:   600, err:  1104)
+!!upper_vols_update
+!!upper_vols_update
 H:  996 | Turn: 25224/25351 | Add: 1001 | Discard:  992 (0.998 loss) | Score:  1606 (add:   500, err:  1105)
-H:  997 | Turn: 25255/25351 | Add: 1002 | Discard:  993 (1.000 loss) | Score:  1608 (add:   500, err:  1107)
-H:  998 | Turn: 25289/25351 | Add: 1002 | Discard:  994 (1.000 loss) | Score:  1512 (add:   400, err:  1111)
-H:  999 | Turn: 25310/25351 | Add: 1003 | Discard:  995 (1.005 loss) | Score:  1513 (add:   400, err:  1112)
-H: 1000 | Turn: 25335/25351 | Add: 1005 | Discard:  995 (1.005 loss) | Score:  1614 (add:   500, err:  1113)
-color num: 4, call: 1000, total: 23342, avg: 23.342000
+!!upper_vols_update
+!!upper_vols_update
+H:  997 | Turn: 25253/25351 | Add: 1001 | Discard:  993 (0.999 loss) | Score:  1507 (add:   400, err:  1106)
+!!upper_vols_update
+H:  998 | Turn: 25274/25351 | Add: 1001 | Discard:  994 (1.000 loss) | Score:  1409 (add:   300, err:  1108)
+!!upper_vols_update
+!!upper_vols_update
+!!upper_vols_update
+H:  999 | Turn: 25300/25351 | Add: 1002 | Discard:  995 (1.012 loss) | Score:  1434 (add:   300, err:  1133)
+!!upper_vols_update
+!!upper_vols_update
+!!upper_vols_update
+H: 1000 | Turn: 25331/25351 | Add: 1003 | Discard:  995 (1.012 loss) | Score:  1438 (add:   300, err:  1137)
+color num: 4, call: 996, total: 23236, avg: 23.329317
+color num: 5, call: 1, total: 19, avg: 19.000000
+color num: 6, call: 1, total: 33, avg: 33.000000
+color num: 8, call: 1, total: 27, avg: 27.000000
+color num: 9, call: 1, total: 24, avg: 24.000000
 K: 15, T:25351, D:100
-score: 1614, elapsed: 2887.751094, turn: 25335/25351
-1614 25335
+score: 1438, elapsed: 2771.316044, turn: 25331/25351
+1438 25331

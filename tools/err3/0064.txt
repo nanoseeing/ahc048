@@ -103,10 +103,15 @@ H:  992 | Turn: 10943/11069 | Add:  996 | Discard:  818 (0.464 loss) | Score: 22
 H:  993 | Turn: 10953/11069 | Add:  996 | Discard:  819 (0.465 loss) | Score: 226389 (add:  7095, err: 219293)
 H:  994 | Turn: 10967/11069 | Add:  996 | Discard:  820 (0.465 loss) | Score: 224044 (add:  4730, err: 219313)
 H:  995 | Turn: 10982/11069 | Add:  997 | Discard:  821 (0.465 loss) | Score: 224045 (add:  4730, err: 219314)
+!!upper_vols_update
+!!upper_vols_update
+!!upper_vols_update
 H:  996 | Turn: 11007/11069 | Add: 1000 | Discard:  822 (0.466 loss) | Score: 228775 (add:  9460, err: 219314)
 H:  997 | Turn: 11018/11069 | Add: 1001 | Discard:  823 (0.466 loss) | Score: 229069 (add:  9460, err: 219608)
+!!upper_vols_update
 H:  998 | Turn: 11032/11069 | Add: 1001 | Discard:  824 (0.468 loss) | Score: 226716 (add:  7095, err: 219620)
 H:  999 | Turn: 11042/11069 | Add: 1001 | Discard:  825 (0.469 loss) | Score: 224646 (add:  4730, err: 219915)
+!!upper_vols_update
 H: 1000 | Turn: 11056/11069 | Add: 1002 | Discard:  825 (0.469 loss) | Score: 224825 (add:  4730, err: 220094)
 PolicyGreedy 168 times. Error 114075
 color num: 2, call: 425, total: 3770, avg: 8.870588
@@ -114,5 +119,5 @@ color num: 3, call: 400, total: 5165, avg: 12.912500
 color num: 4, call: 7, total: 128, avg: 18.285714
 color num: 99, call: 168, total: 1811, avg: 10.779762
 K: 5, T:11069, D:2365
-score: 224825, elapsed: 691.091356, turn: 11056/11069
+score: 224825, elapsed: 669.007794, turn: 11056/11069
 224825 11056

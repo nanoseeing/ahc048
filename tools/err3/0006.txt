@@ -102,17 +102,26 @@ H:  991 | Turn: 16503/16692 | Add:  994 | Discard:  980 (0.485 loss) | Score: 21
 H:  992 | Turn: 16517/16692 | Add:  994 | Discard:  981 (0.486 loss) | Score: 21456 (add:   550, err: 20905)
 H:  993 | Turn: 16536/16692 | Add:  995 | Discard:  982 (0.486 loss) | Score: 21457 (add:   550, err: 20906)
 H:  994 | Turn: 16556/16692 | Add:  997 | Discard:  983 (0.486 loss) | Score: 21732 (add:   825, err: 20906)
+!!upper_vols_update
+!!upper_vols_update
 H:  995 | Turn: 16571/16692 | Add:  998 | Discard:  984 (0.487 loss) | Score: 21798 (add:   825, err: 20972)
+!!upper_vols_update
 H:  996 | Turn: 16606/16692 | Add:  999 | Discard:  985 (0.487 loss) | Score: 21798 (add:   825, err: 20972)
+!!upper_vols_update
+!!upper_vols_update
 H:  997 | Turn: 16625/16692 | Add: 1000 | Discard:  986 (0.487 loss) | Score: 21799 (add:   825, err: 20973)
+!!upper_vols_update
+!!upper_vols_update
 H:  998 | Turn: 16644/16692 | Add: 1001 | Discard:  987 (0.487 loss) | Score: 21799 (add:   825, err: 20973)
+!!upper_vols_update
 H:  999 | Turn: 16662/16692 | Add: 1001 | Discard:  988 (0.488 loss) | Score: 21525 (add:   550, err: 20974)
-H: 1000 | Turn: 16680/16692 | Add: 1002 | Discard:  988 (0.488 loss) | Score: 21526 (add:   550, err: 20975)
+!!upper_vols_update
+H: 1000 | Turn: 16676/16692 | Add: 1001 | Discard:  988 (0.488 loss) | Score: 21379 (add:   275, err: 21103)
 PolicyGreedy 6 times. Error 1528.34
 color num: 2, call: 61, total: 528, avg: 8.655738
 color num: 3, call: 421, total: 5433, avg: 12.904988
-color num: 4, call: 512, total: 8725, avg: 17.041016
+color num: 4, call: 512, total: 8721, avg: 17.033203
 color num: 99, call: 6, total: 92, avg: 15.333333
 K: 4, T:16692, D:275
-score: 21526, elapsed: 1959.625650, turn: 16680/16692
-21526 16680
+score: 21379, elapsed: 2762.204651, turn: 16676/16692
+21379 16676

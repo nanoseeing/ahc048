@@ -103,16 +103,20 @@ H:  992 | Turn: 33113/60887 | Add:  994 | Discard:  873 (0.156 loss) | Score:  8
 H:  993 | Turn: 33147/60887 | Add:  995 | Discard:  873 (0.156 loss) | Score:  8384 (add:  7644, err:   739)
 H:  994 | Turn: 33182/60887 | Add:  996 | Discard:  874 (0.156 loss) | Score:  8384 (add:  7644, err:   739)
 H:  995 | Turn: 33216/60887 | Add:  997 | Discard:  874 (0.156 loss) | Score:  8385 (add:  7644, err:   740)
+!!upper_vols_update
+!!upper_vols_update
 H:  996 | Turn: 33251/60887 | Add:  998 | Discard:  875 (0.156 loss) | Score:  8385 (add:  7644, err:   740)
+!!upper_vols_update
 H:  997 | Turn: 33286/60887 | Add:  999 | Discard:  876 (0.156 loss) | Score:  8385 (add:  7644, err:   740)
+!!upper_vols_update
 H:  998 | Turn: 33321/60887 | Add: 1000 | Discard:  877 (0.156 loss) | Score:  8385 (add:  7644, err:   740)
+!!upper_vols_update
 H:  999 | Turn: 33355/60887 | Add: 1000 | Discard:  878 (0.156 loss) | Score:  4563 (add:  3822, err:   740)
 !!upper_vols_update
 !!upper_vols_update
-!!upper_vols_update
-H: 1000 | Turn: 33379/60887 | Add: 1001 | Discard:  878 (0.156 loss) | Score:  4591 (add:  3822, err:   768)
+H: 1000 | Turn: 33367/60887 | Add: 1001 | Discard:  878 (0.156 loss) | Score:  6207 (add:  3822, err:  2384)
 color num: 3, call: 1, total: 12, avg: 12.000000
-color num: 4, call: 999, total: 31492, avg: 31.523524
+color num: 4, call: 999, total: 31478, avg: 31.509510
 K: 4, T:60887, D:3822
-score: 4591, elapsed: 2190.032035, turn: 33379/60887
-4591 33379
+score: 6207, elapsed: 3088.597804, turn: 33367/60887
+6207 33367

@@ -109,5 +109,5 @@ H:  998 | Turn:  2004/ 5546 | Add: 1003 | Discard:    3 (3.000 loss) | Score: 34
 H:  999 | Turn:  2005/ 5546 | Add: 1003 | Discard:    3 (3.000 loss) | Score: 349762 (add:  9188, err: 340573)
 H: 1000 | Turn:  2006/ 5546 | Add: 1003 | Discard:    3 (3.000 loss) | Score: 349496 (add:  6891, err: 342604)
 K: 11, T:5546, D:2297
-score: 349496, elapsed: 274.408981, turn: 2006/5546
+score: 349496, elapsed: 298.741520, turn: 2006/5546
 349496 2006

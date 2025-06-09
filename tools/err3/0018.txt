@@ -102,13 +102,22 @@ H:  991 | Turn: 27413/27695 | Add:  993 | Discard:  957 (0.188 loss) | Score:  1
 H:  992 | Turn: 27436/27695 | Add:  994 | Discard:  958 (0.188 loss) | Score:  1737 (add:  1182, err:   554)
 H:  993 | Turn: 27468/27695 | Add:  996 | Discard:  959 (0.188 loss) | Score:  2328 (add:  1773, err:   554)
 H:  994 | Turn: 27499/27695 | Add:  997 | Discard:  960 (0.188 loss) | Score:  2328 (add:  1773, err:   554)
+!!upper_vols_update
 H:  995 | Turn: 27525/27695 | Add:  997 | Discard:  961 (0.188 loss) | Score:  1738 (add:  1182, err:   555)
+!!upper_vols_update
 H:  996 | Turn: 27552/27695 | Add:  998 | Discard:  962 (0.190 loss) | Score:  1740 (add:  1182, err:   557)
+!!upper_vols_update
+!!upper_vols_update
 H:  997 | Turn: 27588/27695 | Add: 1000 | Discard:  963 (0.190 loss) | Score:  2331 (add:  1773, err:   557)
+!!upper_vols_update
 H:  998 | Turn: 27622/27695 | Add: 1000 | Discard:  964 (0.190 loss) | Score:  1740 (add:  1182, err:   557)
+!!upper_vols_update
+!!upper_vols_update
+!!upper_vols_update
 H:  999 | Turn: 27653/27695 | Add: 1001 | Discard:  965 (0.190 loss) | Score:  1740 (add:  1182, err:   557)
+!!upper_vols_update
 H: 1000 | Turn: 27680/27695 | Add: 1002 | Discard:  965 (0.190 loss) | Score:  1740 (add:  1182, err:   557)
 color num: 4, call: 1000, total: 25718, avg: 25.718000
 K: 4, T:27695, D:591
-score: 1740, elapsed: 2201.727881, turn: 27680/27695
+score: 1740, elapsed: 1959.055899, turn: 27680/27695
 1740 27680

@@ -109,5 +109,5 @@ H:  998 | Turn:  2048/ 6266 | Add: 1032 | Discard:   18 (18.000 loss) | Score: 2
 H:  999 | Turn:  2049/ 6266 | Add: 1032 | Discard:   18 (18.000 loss) | Score: 233269 (add: 17688, err: 215580)
 H: 1000 | Turn:  2050/ 6266 | Add: 1032 | Discard:   18 (18.000 loss) | Score: 233259 (add: 17152, err: 216106)
 K: 13, T:6266, D:536
-score: 233259, elapsed: 418.182261, turn: 2050/6266
+score: 233259, elapsed: 425.476135, turn: 2050/6266
 233259 2050

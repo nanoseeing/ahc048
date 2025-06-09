@@ -109,5 +109,5 @@ H:  998 | Turn:  2027/ 4582 | Add: 1024 | Discard:    5 (5.000 loss) | Score: 22
 H:  999 | Turn:  2028/ 4582 | Add: 1024 | Discard:    5 (5.000 loss) | Score: 227645 (add: 14925, err: 212719)
 H: 1000 | Turn:  2032/ 4582 | Add: 1025 | Discard:    7 (7.000 loss) | Score: 228229 (add: 14925, err: 213303)
 K: 13, T:4582, D:597
-score: 228229, elapsed: 473.825809, turn: 2032/4582
+score: 228229, elapsed: 450.124015, turn: 2032/4582
 228229 2032

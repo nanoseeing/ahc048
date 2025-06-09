@@ -109,5 +109,5 @@ H:  998 | Turn:  3125/ 5567 | Add: 1700 | Discard:  427 (427.000 loss) | Score: 
 H:  999 | Turn:  3128/ 5567 | Add: 1702 | Discard:  427 (427.000 loss) | Score: 113912 (add: 11248, err: 102663)
 H: 1000 | Turn:  3131/ 5567 | Add: 1704 | Discard:  427 (427.000 loss) | Score: 113989 (add: 11264, err: 102724)
 K: 16, T:5567, D:16
-score: 113989, elapsed: 613.626370, turn: 3131/5567
+score: 113989, elapsed: 590.018082, turn: 3131/5567
 113989 3131

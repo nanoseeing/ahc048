@@ -103,12 +103,20 @@ H:  992 | Turn: 33383/56004 | Add:  995 | Discard:  962 (0.094 loss) | Score:   
 H:  993 | Turn: 33417/56004 | Add:  995 | Discard:  963 (0.094 loss) | Score:   464 (add:   178, err:   285)
 H:  994 | Turn: 33452/56004 | Add:  996 | Discard:  964 (0.094 loss) | Score:   464 (add:   178, err:   285)
 H:  995 | Turn: 33489/56004 | Add:  999 | Discard:  965 (0.094 loss) | Score:   642 (add:   356, err:   285)
+!!upper_vols_update
 H:  996 | Turn: 33523/56004 | Add:  999 | Discard:  966 (0.094 loss) | Score:   553 (add:   267, err:   285)
+!!upper_vols_update
 H:  997 | Turn: 33559/56004 | Add: 1001 | Discard:  967 (0.094 loss) | Score:   643 (add:   356, err:   286)
+!!upper_vols_update
+!!upper_vols_update
 H:  998 | Turn: 33589/56004 | Add: 1001 | Discard:  968 (0.094 loss) | Score:   554 (add:   267, err:   286)
-H:  999 | Turn: 33624/56004 | Add: 1002 | Discard:  969 (0.094 loss) | Score:   554 (add:   267, err:   286)
-H: 1000 | Turn: 33654/56004 | Add: 1003 | Discard:  969 (0.094 loss) | Score:   554 (add:   267, err:   286)
-color num: 4, call: 1000, total: 31689, avg: 31.689000
+!!upper_vols_update
+!!upper_vols_update
+H:  999 | Turn: 33620/56004 | Add: 1001 | Discard:  969 (0.095 loss) | Score:   469 (add:   178, err:   290)
+!!upper_vols_update
+H: 1000 | Turn: 33650/56004 | Add: 1003 | Discard:  969 (0.095 loss) | Score:   558 (add:   267, err:   290)
+color num: 4, call: 999, total: 31656, avg: 31.687688
+color num: 5, call: 1, total: 29, avg: 29.000000
 K: 6, T:56004, D:89
-score: 554, elapsed: 1555.799717, turn: 33654/56004
-554 33654
+score: 558, elapsed: 1365.201812, turn: 33650/56004
+558 33650

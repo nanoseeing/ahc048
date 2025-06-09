@@ -109,5 +109,5 @@ H:  998 | Turn:  2013/ 4826 | Add: 1011 | Discard:    4 (4.000 loss) | Score: 25
 H:  999 | Turn:  2014/ 4826 | Add: 1011 | Discard:    4 (4.000 loss) | Score: 255484 (add:  9468, err: 246015)
 H: 1000 | Turn:  2015/ 4826 | Add: 1011 | Discard:    4 (4.000 loss) | Score: 255030 (add:  8679, err: 246350)
 K: 10, T:4826, D:789
-score: 255030, elapsed: 296.450372, turn: 2015/4826
+score: 255030, elapsed: 259.921370, turn: 2015/4826
 255030 2015

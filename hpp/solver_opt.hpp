@@ -15,7 +15,9 @@ const int INIT_PARTITION_POS = 0; // パーティション初期値
 long long MAX_SIMULATE_CNT = 2e7; // 分数パターンの最大数（目安）
 const int SEARCH_LEFT = -1;       // 直積の左側を探索
 const int SEARCH_RIGHT = 1;       // 直積の右側を探索
-const int MIN_SEARCH_NUM = 28;
+const int SEARCH_NUM_THRESHOLD = 15;
+const int MIN_SEARCH_NUM = 25;
+const int FIRST_SEARCH_NUM = 100;
 
 int calc_pred_fractor_turn(int comb_size) {
     return comb_size * PARTITION_SWITCH_TURN + 3; // 追加,配達,削除
@@ -470,7 +472,7 @@ class PolicyFractor {
     ColorGroupManager &color_group_manager;
     FractorManager &fractor_manager;
     TimeKeeper &time_keeper;
-    int now_search_num = MIN_SEARCH_NUM;
+    int now_search_num;
 
     double start_time;
     struct ImmediateInfo {
@@ -485,6 +487,11 @@ class PolicyFractor {
                   TimeKeeper &time_keeper_)
         : input(input_), state(state_), mixer(mixer_), color_group_manager(color_group_manager_), fractor_manager(fractor_manager_), time_keeper(time_keeper_) {
         start_time = time_keeper_.getElapsedTime();
+        if(input.K <= SEARCH_NUM_THRESHOLD) {
+            now_search_num = FIRST_SEARCH_NUM;
+        } else {
+            now_search_num = MIN_SEARCH_NUM;
+        }
     }
 
     tuple<int, int> search_target_weight_idx(int k, double target_vol, bool is_add, int max_mul_cnt) {
@@ -705,11 +712,6 @@ class PolicyFractor {
         double real_diff_time = MAX_TIME - elapsed_time;
         double obj_one_deliver_time = (MAX_TIME - start_time) / (double)input.H;
         double obj_time = start_time + obj_one_deliver_time * state.deliver_cnt;
-        // if(elapsed_time < obj_time) {
-        //     now_search_num += 10;
-        // } else {
-        //     now_search_num = max(MIN_SEARCH_NUM, now_search_num - 1);
-        // }
 
         double best_cost = 1e9;
         vector<ImmediateInfo> best_info;
@@ -770,48 +772,7 @@ class PolicyFractor {
             }
         }
 
-        // 不等式制約つきで問題を解いてみる
-        auto [now_cost, now_info] = this->with_upperbound(policy_item);
-        if(now_cost < best_cost) {
-            best_cost = now_cost;
-            best_info = now_info;
-        }
-
         assert((int)best_info.size() != 0);
-        return {best_cost, best_info};
-    }
-
-    pair<double, vector<ImmediateInfo>> with_upperbound(Planner::PolicyItem &policy_item) {
-        double best_cost = 1e9;
-        vector<ImmediateInfo> best_info;
-
-        vector<double> upper_vols;
-        for(int k : range(input.K)) {
-            upper_vols.push_back(color_group_manager.get_paint(k, state).vol);
-        }
-        double sum_vol = accumulate(ALL(upper_vols), 0.0);
-        if(sum_vol >= 1.0 - 1e-6) {
-            return {best_cost, best_info};
-        }
-
-        for(int k : range(input.K + 1)) {
-            auto new_upper_vols = upper_vols;
-            if(k < input.K) {
-                new_upper_vols[k] = 1.0;
-            }
-            auto upper_vols_result = mixer.get_fract_result_with_upper_vols(state.deliver_cnt, new_upper_vols);
-            int comb_size = (int)upper_vols_result.indices.size();
-            int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
-            if(remain_turn >= 0) {
-                int max_double_frac_num = min(comb_size, (int)(remain_turn / PARTITION_SWITCH_TURN));
-                auto [now_cost, now_info] = helper_turn(upper_vols_result, max_double_frac_num);
-                if(now_cost < best_cost) {
-                    cerr << "!!upper_vols_update" << endl;
-                    best_cost = now_cost;
-                    best_info = now_info;
-                }
-            }
-        }
         return {best_cost, best_info};
     }
 

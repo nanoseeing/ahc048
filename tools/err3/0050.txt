@@ -109,5 +109,5 @@ H:  998 | Turn:  2028/ 6864 | Add: 1023 | Discard:    7 (7.000 loss) | Score: 32
 H:  999 | Turn:  2031/ 6864 | Add: 1025 | Discard:    7 (7.000 loss) | Score: 323118 (add: 16796, err: 306321)
 H: 1000 | Turn:  2032/ 6864 | Add: 1025 | Discard:    7 (7.000 loss) | Score: 323420 (add: 16150, err: 307269)
 K: 7, T:6864, D:646
-score: 323420, elapsed: 122.356343, turn: 2032/6864
+score: 323420, elapsed: 144.546569, turn: 2032/6864
 323420 2032

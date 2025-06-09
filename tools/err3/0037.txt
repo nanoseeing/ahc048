@@ -109,5 +109,5 @@ H:  998 | Turn:  2019/ 8863 | Add: 1016 | Discard:    5 (5.000 loss) | Score: 31
 H:  999 | Turn:  2020/ 8863 | Add: 1016 | Discard:    5 (5.000 loss) | Score: 313498 (add: 11645, err: 301852)
 H: 1000 | Turn:  2021/ 8863 | Add: 1016 | Discard:    5 (5.000 loss) | Score: 313072 (add: 10960, err: 302111)
 K: 4, T:8863, D:685
-score: 313072, elapsed: 45.325545, turn: 2021/8863
+score: 313072, elapsed: 36.703060, turn: 2021/8863
 313072 2021

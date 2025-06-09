@@ -109,5 +109,5 @@ H:  998 | Turn:  2096/10464 | Add: 1066 | Discard:   32 (32.000 loss) | Score: 1
 H:  999 | Turn:  2097/10464 | Add: 1066 | Discard:   32 (32.000 loss) | Score: 181295 (add: 21105, err: 160189)
 H: 1000 | Turn:  2098/10464 | Add: 1066 | Discard:   32 (32.000 loss) | Score: 181353 (add: 20790, err: 160562)
 K: 10, T:10464, D:315
-score: 181353, elapsed: 329.128894, turn: 2098/10464
+score: 181353, elapsed: 299.795259, turn: 2098/10464
 181353 2098

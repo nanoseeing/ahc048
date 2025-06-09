@@ -109,5 +109,5 @@ H:  998 | Turn:  2024/ 4932 | Add: 1017 | Discard:    9 (9.000 loss) | Score: 26
 H:  999 | Turn:  2025/ 4932 | Add: 1017 | Discard:    9 (9.000 loss) | Score: 269701 (add: 13068, err: 256632)
 H: 1000 | Turn:  2026/ 4932 | Add: 1017 | Discard:    9 (9.000 loss) | Score: 269621 (add: 12342, err: 257278)
 K: 7, T:4932, D:726
-score: 269621, elapsed: 147.008049, turn: 2026/4932
+score: 269621, elapsed: 143.960661, turn: 2026/4932
 269621 2026

@@ -109,5 +109,5 @@ H:  998 | Turn:  2380/ 5906 | Add: 1202 | Discard:  180 (180.000 loss) | Score: 
 H:  999 | Turn:  2381/ 5906 | Add: 1202 | Discard:  180 (180.000 loss) | Score: 291796 (add: 32886, err: 258909)
 H: 1000 | Turn:  2385/ 5906 | Add: 1204 | Discard:  181 (181.000 loss) | Score: 292138 (add: 33048, err: 259089)
 K: 6, T:5906, D:162
-score: 292138, elapsed: 79.581786, turn: 2385/5906
+score: 292138, elapsed: 84.859602, turn: 2385/5906
 292138 2385

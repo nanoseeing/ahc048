@@ -109,5 +109,5 @@ H:  998 | Turn:  2977/ 7721 | Add: 1566 | Discard:  413 (413.000 loss) | Score: 
 H:  999 | Turn:  2981/ 7721 | Add: 1569 | Discard:  413 (413.000 loss) | Score: 186648 (add:  9690, err: 176957)
 H: 1000 | Turn:  2984/ 7721 | Add: 1570 | Discard:  414 (414.000 loss) | Score: 186834 (add:  9690, err: 177143)
 K: 8, T:7721, D:17
-score: 186834, elapsed: 148.770085, turn: 2984/7721
+score: 186834, elapsed: 176.866461, turn: 2984/7721
 186834 2984

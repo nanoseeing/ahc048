@@ -109,5 +109,5 @@ H:  998 | Turn:  3095/ 5624 | Add: 1688 | Discard:  409 (409.000 loss) | Score: 
 H:  999 | Turn:  3097/ 5624 | Add: 1689 | Discard:  409 (409.000 loss) | Score: 88198 (add:  9660, err: 78537)
 H: 1000 | Turn:  3099/ 5624 | Add: 1690 | Discard:  409 (409.000 loss) | Score: 88303 (add:  9660, err: 78642)
 K: 14, T:5624, D:14
-score: 88303, elapsed: 479.571972, turn: 3099/5624
+score: 88303, elapsed: 552.521268, turn: 3099/5624
 88303 3099

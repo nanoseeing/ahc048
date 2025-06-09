@@ -109,5 +109,5 @@ H:  998 | Turn:  2005/ 6017 | Add: 1004 | Discard:    3 (3.000 loss) | Score: 29
 H:  999 | Turn:  2009/ 6017 | Add: 1005 | Discard:    5 (5.000 loss) | Score: 294600 (add:  9786, err: 284813)
 H: 1000 | Turn:  2010/ 6017 | Add: 1005 | Discard:    5 (5.000 loss) | Score: 294713 (add:  8155, err: 286557)
 K: 10, T:6017, D:1631
-score: 294713, elapsed: 262.544238, turn: 2010/6017
+score: 294713, elapsed: 258.881197, turn: 2010/6017
 294713 2010

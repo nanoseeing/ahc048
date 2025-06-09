@@ -109,5 +109,5 @@ H:  998 | Turn:  3061/ 7463 | Add: 1638 | Discard:  425 (425.000 loss) | Score: 
 H:  999 | Turn:  3063/ 7463 | Add: 1639 | Discard:  425 (425.000 loss) | Score: 135536 (add: 10240, err: 125295)
 H: 1000 | Turn:  3066/ 7463 | Add: 1641 | Discard:  425 (425.000 loss) | Score: 135637 (add: 10256, err: 125380)
 K: 10, T:7463, D:16
-score: 135637, elapsed: 308.260671, turn: 3066/7463
+score: 135637, elapsed: 249.734061, turn: 3066/7463
 135637 3066

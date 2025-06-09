@@ -109,5 +109,5 @@ H:  998 | Turn:  2096/ 6032 | Add: 1065 | Discard:   33 (33.000 loss) | Score: 1
 H:  999 | Turn:  2097/ 6032 | Add: 1065 | Discard:   33 (33.000 loss) | Score: 197972 (add: 24288, err: 173683)
 H: 1000 | Turn:  2098/ 6032 | Add: 1065 | Discard:   33 (33.000 loss) | Score: 197902 (add: 23920, err: 173981)
 K: 16, T:6032, D:368
-score: 197902, elapsed: 672.983948, turn: 2098/6032
+score: 197902, elapsed: 725.393965, turn: 2098/6032
 197902 2098

@@ -102,14 +102,20 @@ H:  991 | Turn: 27704/27990 | Add:  993 | Discard:  972 (0.264 loss) | Score:   
 H:  992 | Turn: 27735/27990 | Add:  994 | Discard:  973 (0.265 loss) | Score:   798 (add:   334, err:   463)
 H:  993 | Turn: 27763/27990 | Add:  996 | Discard:  974 (0.265 loss) | Score:   965 (add:   501, err:   463)
 H:  994 | Turn: 27790/27990 | Add:  997 | Discard:  975 (0.265 loss) | Score:   965 (add:   501, err:   463)
-H:  995 | Turn: 27817/27990 | Add:  998 | Discard:  976 (0.265 loss) | Score:   965 (add:   501, err:   463)
-H:  996 | Turn: 27847/27990 | Add:  998 | Discard:  977 (0.265 loss) | Score:   799 (add:   334, err:   464)
-H:  997 | Turn: 27879/27990 | Add: 1000 | Discard:  978 (0.266 loss) | Score:   968 (add:   501, err:   466)
-H:  998 | Turn: 27913/27990 | Add: 1000 | Discard:  979 (0.266 loss) | Score:   801 (add:   334, err:   466)
-H:  999 | Turn: 27948/27990 | Add: 1001 | Discard:  980 (0.266 loss) | Score:   801 (add:   334, err:   466)
-H: 1000 | Turn: 27971/27990 | Add: 1002 | Discard:  980 (0.266 loss) | Score:   846 (add:   334, err:   511)
-color num: 3, call: 1, total: 25, avg: 25.000000
-color num: 4, call: 999, total: 25969, avg: 25.994995
+!!upper_vols_update
+H:  995 | Turn: 27813/27990 | Add:  997 | Discard:  976 (0.265 loss) | Score:   798 (add:   334, err:   463)
+!!upper_vols_update
+!!upper_vols_update
+H:  996 | Turn: 27847/27990 | Add:  998 | Discard:  977 (0.265 loss) | Score:   798 (add:   334, err:   463)
+!!upper_vols_update
+H:  997 | Turn: 27879/27990 | Add: 1000 | Discard:  978 (0.265 loss) | Score:   965 (add:   501, err:   463)
+!!upper_vols_update
+H:  998 | Turn: 27909/27990 | Add: 1000 | Discard:  979 (0.265 loss) | Score:   799 (add:   334, err:   464)
+!!upper_vols_update
+H:  999 | Turn: 27936/27990 | Add: 1001 | Discard:  980 (0.265 loss) | Score:   799 (add:   334, err:   464)
+!!upper_vols_update
+H: 1000 | Turn: 27960/27990 | Add: 1002 | Discard:  980 (0.265 loss) | Score:   813 (add:   334, err:   478)
+color num: 4, call: 1000, total: 25983, avg: 25.983000
 K: 4, T:27990, D:167
-score: 846, elapsed: 1815.308134, turn: 27971/27990
-846 27971
+score: 813, elapsed: 1864.256620, turn: 27960/27990
+813 27960

@@ -103,16 +103,22 @@ H:  992 | Turn: 17434/17611 | Add:  994 | Discard:  970 (0.297 loss) | Score: 25
 H:  993 | Turn: 17454/17611 | Add:  996 | Discard:  971 (0.297 loss) | Score: 32890 (add: 21444, err: 11445)
 H:  994 | Turn: 17472/17611 | Add:  996 | Discard:  972 (0.298 loss) | Score: 25746 (add: 14296, err: 11449)
 H:  995 | Turn: 17488/17611 | Add:  998 | Discard:  973 (0.301 loss) | Score: 32917 (add: 21444, err: 11472)
+!!upper_vols_update
 H:  996 | Turn: 17518/17611 | Add:  998 | Discard:  974 (0.302 loss) | Score: 25772 (add: 14296, err: 11475)
+!!upper_vols_update
 H:  997 | Turn: 17541/17611 | Add:  999 | Discard:  975 (0.302 loss) | Score: 25772 (add: 14296, err: 11475)
+!!upper_vols_update
 H:  998 | Turn: 17564/17611 | Add: 1000 | Discard:  976 (0.302 loss) | Score: 25772 (add: 14296, err: 11475)
+!!upper_vols_update
 H:  999 | Turn: 17579/17611 | Add: 1001 | Discard:  977 (0.303 loss) | Score: 25789 (add: 14296, err: 11492)
-H: 1000 | Turn: 17593/17611 | Add: 1002 | Discard:  977 (0.303 loss) | Score: 25989 (add: 14296, err: 11692)
+!!upper_vols_update
+!!upper_vols_update
+H: 1000 | Turn: 17594/17611 | Add: 1002 | Discard:  977 (0.303 loss) | Score: 25835 (add: 14296, err: 11538)
 PolicyGreedy 3 times. Error 716.746
 color num: 2, call: 22, total: 194, avg: 8.818182
-color num: 3, call: 285, total: 3637, avg: 12.761404
-color num: 4, call: 690, total: 11782, avg: 17.075362
+color num: 3, call: 284, total: 3624, avg: 12.760563
+color num: 4, call: 691, total: 11796, avg: 17.070912
 color num: 99, call: 3, total: 44, avg: 14.666667
 K: 4, T:17611, D:7148
-score: 25989, elapsed: 2058.465946, turn: 17593/17611
-25989 17593
+score: 25835, elapsed: 2877.151235, turn: 17594/17611
+25835 17594

@@ -109,5 +109,5 @@ H:  998 | Turn:  2416/ 6525 | Add: 1283 | Discard:  135 (135.000 loss) | Score: 
 H:  999 | Turn:  2417/ 6525 | Add: 1283 | Discard:  135 (135.000 loss) | Score: 180118 (add: 30388, err: 149729)
 H: 1000 | Turn:  2419/ 6525 | Add: 1284 | Discard:  135 (135.000 loss) | Score: 180169 (add: 30388, err: 149780)
 K: 12, T:6525, D:107
-score: 180169, elapsed: 469.563813, turn: 2419/6525
+score: 180169, elapsed: 544.964759, turn: 2419/6525
 180169 2419

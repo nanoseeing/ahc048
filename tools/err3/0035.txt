@@ -102,14 +102,24 @@ H:  991 | Turn: 33214/37391 | Add:  993 | Discard:  946 (0.230 loss) | Score:   
 H:  992 | Turn: 33249/37391 | Add:  994 | Discard:  947 (0.230 loss) | Score:   746 (add:   146, err:   599)
 H:  993 | Turn: 33275/37391 | Add:  994 | Discard:  948 (0.230 loss) | Score:   673 (add:    73, err:   599)
 H:  994 | Turn: 33312/37391 | Add:  997 | Discard:  949 (0.230 loss) | Score:   819 (add:   219, err:   599)
+!!upper_vols_update
+!!upper_vols_update
 H:  995 | Turn: 33347/37391 | Add:  998 | Discard:  950 (0.230 loss) | Score:   819 (add:   219, err:   599)
+!!upper_vols_update
+!!upper_vols_update
 H:  996 | Turn: 33382/37391 | Add:  999 | Discard:  951 (0.230 loss) | Score:   820 (add:   219, err:   600)
+!!upper_vols_update
 H:  997 | Turn: 33417/37391 | Add: 1000 | Discard:  952 (0.231 loss) | Score:   820 (add:   219, err:   600)
+!!upper_vols_update
+!!upper_vols_update
 H:  998 | Turn: 33448/37391 | Add: 1001 | Discard:  953 (0.231 loss) | Score:   820 (add:   219, err:   600)
+!!upper_vols_update
+!!upper_vols_update
 H:  999 | Turn: 33477/37391 | Add: 1002 | Discard:  954 (0.231 loss) | Score:   821 (add:   219, err:   601)
+!!upper_vols_update
 H: 1000 | Turn: 33506/37391 | Add: 1002 | Discard:  954 (0.231 loss) | Score:   749 (add:   146, err:   602)
 color num: 3, call: 1, total: 14, avg: 14.000000
 color num: 4, call: 999, total: 31542, avg: 31.573574
 K: 4, T:37391, D:73
-score: 749, elapsed: 1902.536714, turn: 33506/37391
+score: 749, elapsed: 1993.058034, turn: 33506/37391
 749 33506

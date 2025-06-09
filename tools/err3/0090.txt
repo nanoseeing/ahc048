@@ -109,5 +109,5 @@ H:  998 | Turn:  2006/ 5048 | Add: 1006 | Discard:    2 (2.000 loss) | Score: 36
 H:  999 | Turn:  2007/ 5048 | Add: 1006 | Discard:    2 (2.000 loss) | Score: 363696 (add:  9002, err: 354693)
 H: 1000 | Turn:  2008/ 5048 | Add: 1006 | Discard:    2 (2.000 loss) | Score: 363940 (add:  7716, err: 356223)
 K: 7, T:5048, D:1286
-score: 363940, elapsed: 173.985924, turn: 2008/5048
+score: 363940, elapsed: 135.951135, turn: 2008/5048
 363940 2008

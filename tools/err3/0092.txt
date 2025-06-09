@@ -97,18 +97,42 @@ H:  950 | Turn: 27655/29145 | Add:  960 | Discard:  948 (1.034 loss) | Score:  1
 H:  960 | Turn: 27947/29145 | Add:  970 | Discard:  958 (1.044 loss) | Score:  1107 (add:   260, err:   846)
 H:  970 | Turn: 28241/29145 | Add:  980 | Discard:  968 (1.050 loss) | Score:  1113 (add:   260, err:   852)
 H:  980 | Turn: 28529/29145 | Add:  988 | Discard:  978 (1.061 loss) | Score:  1070 (add:   208, err:   861)
+!!upper_vols_update
+!!upper_vols_update
+!!upper_vols_update
 H:  990 | Turn: 28815/29145 | Add: 1000 | Discard:  988 (1.070 loss) | Score:  1138 (add:   260, err:   877)
+!!upper_vols_update
 H:  991 | Turn: 28845/29145 | Add: 1000 | Discard:  989 (1.071 loss) | Score:  1113 (add:   234, err:   878)
+!!upper_vols_update
 H:  992 | Turn: 28871/29145 | Add: 1000 | Discard:  990 (1.078 loss) | Score:  1100 (add:   208, err:   891)
+!!upper_vols_update
+!!upper_vols_update
 H:  993 | Turn: 28902/29145 | Add: 1001 | Discard:  991 (1.078 loss) | Score:  1101 (add:   208, err:   892)
-H:  994 | Turn: 28937/29145 | Add: 1002 | Discard:  992 (1.080 loss) | Score:  1101 (add:   208, err:   892)
-H:  995 | Turn: 28968/29145 | Add: 1003 | Discard:  993 (1.081 loss) | Score:  1102 (add:   208, err:   893)
-H:  996 | Turn: 28998/29145 | Add: 1003 | Discard:  994 (1.084 loss) | Score:  1095 (add:   182, err:   912)
-H:  997 | Turn: 29033/29145 | Add: 1004 | Discard:  995 (1.086 loss) | Score:  1095 (add:   182, err:   912)
-H:  998 | Turn: 29068/29145 | Add: 1005 | Discard:  996 (1.087 loss) | Score:  1095 (add:   182, err:   912)
-H:  999 | Turn: 29095/29145 | Add: 1006 | Discard:  997 (1.088 loss) | Score:  1096 (add:   182, err:   913)
-H: 1000 | Turn: 29124/29145 | Add: 1006 | Discard:  997 (1.088 loss) | Score:  1071 (add:   156, err:   914)
-color num: 4, call: 1000, total: 27131, avg: 27.131000
+!!upper_vols_update
+H:  994 | Turn: 28921/29145 | Add: 1001 | Discard:  992 (1.083 loss) | Score:  1095 (add:   182, err:   912)
+!!upper_vols_update
+!!upper_vols_update
+H:  995 | Turn: 28955/29145 | Add: 1002 | Discard:  993 (1.084 loss) | Score:  1096 (add:   182, err:   913)
+!!upper_vols_update
+!!upper_vols_update
+!!upper_vols_update
+!!upper_vols_update
+!!upper_vols_update
+H:  996 | Turn: 28986/29145 | Add: 1003 | Discard:  994 (1.084 loss) | Score:  1097 (add:   182, err:   914)
+!!upper_vols_update
+H:  997 | Turn: 29024/29145 | Add: 1004 | Discard:  995 (1.084 loss) | Score:  1098 (add:   182, err:   915)
+!!upper_vols_update
+!!upper_vols_update
+H:  998 | Turn: 29054/29145 | Add: 1004 | Discard:  996 (1.084 loss) | Score:  1077 (add:   156, err:   920)
+!!upper_vols_update
+H:  999 | Turn: 29089/29145 | Add: 1005 | Discard:  997 (1.085 loss) | Score:  1078 (add:   156, err:   921)
+!!upper_vols_update
+!!upper_vols_update
+H: 1000 | Turn: 29117/29145 | Add: 1006 | Discard:  997 (1.085 loss) | Score:  1081 (add:   156, err:   924)
+color num: 4, call: 997, total: 27040, avg: 27.121364
+color num: 6, call: 1, total: 30, avg: 30.000000
+color num: 7, call: 1, total: 17, avg: 17.000000
+color num: 8, call: 1, total: 36, avg: 36.000000
 K: 19, T:29145, D:26
-score: 1071, elapsed: 2926.001298, turn: 29124/29145
-1071 29124
+score: 1081, elapsed: 2799.065679, turn: 29117/29145
+1081 29117

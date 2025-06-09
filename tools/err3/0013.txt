@@ -109,5 +109,5 @@ H:  998 | Turn:  1998/ 8239 | Add: 1000 | Discard:    0 (0.000 loss) | Score: 33
 H:  999 | Turn:  1999/ 8239 | Add: 1000 | Discard:    0 (0.000 loss) | Score: 330657 (add:  2825, err: 327831)
 H: 1000 | Turn:  2000/ 8239 | Add: 1000 | Discard:    0 (0.000 loss) | Score: 330244 (add:     0, err: 330243)
 K: 7, T:8239, D:2825
-score: 330244, elapsed: 102.891495, turn: 2000/8239
+score: 330244, elapsed: 122.615862, turn: 2000/8239
 330244 2000

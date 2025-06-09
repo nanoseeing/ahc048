@@ -109,5 +109,5 @@ H:  998 | Turn:  2022/ 8754 | Add: 1013 | Discard:   11 (11.000 loss) | Score: 2
 H:  999 | Turn:  2024/ 8754 | Add: 1014 | Discard:   11 (11.000 loss) | Score: 241833 (add: 14595, err: 227237)
 H: 1000 | Turn:  2025/ 8754 | Add: 1014 | Discard:   11 (11.000 loss) | Score: 242020 (add: 13622, err: 228397)
 K: 18, T:8754, D:973
-score: 242020, elapsed: 937.512653, turn: 2025/8754
+score: 242020, elapsed: 890.399036, turn: 2025/8754
 242020 2025
