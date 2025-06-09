@@ -513,7 +513,7 @@ class PolicyFractor {
         return {it_ind, rates_size};
     }
 
-    double eval_cost(vector<ImmediateInfo> &immeediate_info) {
+    double eval_cost(vector<ImmediateInfo> &immeediate_info, bool is_nealy_final_turn = false) {
         auto &now_target = this->state.input.target[this->state.deliver_cnt];
 
         double sum_vol = 0.0;
@@ -530,24 +530,30 @@ class PolicyFractor {
         Color mixed_color = mix(vols, colors);
         double err_cost = eval_error(mixed_color, now_target) * 1e4;
 
-        // !INFO 使用回数の切り替わりタイミングで急になるような関数にしておく
+        double deliver_gap = max(0.0, 1.0 - sum_vol);
         double discard_target = max(0.0, sum_vol - 1.0);
         double total_discard = state.discard + discard_target;
-        int int_discard = floor(total_discard);
-        double frac_discard = total_discard - int_discard;
-        double discard_cost1 = int_discard * (double)(this->input.D);
-        double discard_cost2 = pow(frac_discard, 2) * (double)(this->input.D);
+        double total_deliver_gap = state.deliver_gap_vols + deliver_gap;
 
-        int total_add_cnt = this->state.add_cnt + add_cnt;
-        if(total_add_cnt > input.H + ceil(state.discard)) {
-            double add_cost = (total_add_cnt - input.H) * (double)(this->input.D);
-            return err_cost + +discard_cost1 + discard_cost2 + add_cost;
+        double x = total_discard - total_deliver_gap - 1e-6; // 捨てた量から配達せずに済んだ量を引いて、配達に必要な境界値の1e-6を引く。
+
+        // !INFO なんかいい感じの急な関数にしようとしたけど、あまり効かなそう。
+        // int int_discard = floor(x);                          // addしなければならなくなった回数がこれになる
+        // double frac_discard = x - int_discard;               // 少数部分
+        // double discard_cost1 = int_discard * (double)(this->input.D);
+        // double discard_cost2 = pow(frac_discard, 0.1) * (double)(this->input.D); //
+        double discard_cost = x * (double)(this->input.D);
+
+        if(is_nealy_final_turn) {
+            int total_add_cnt = this->state.add_cnt + add_cnt;
+            double add_cost = max(0, total_add_cnt - input.H - int(ceil(total_deliver_gap))) * (double)(this->input.D);
+            return err_cost + add_cost;
         } else {
-            return err_cost + discard_cost1 + discard_cost2;
+            return err_cost + discard_cost;
         }
     }
 
-    tuple<vector<ImmediateInfo>, double> eval_one_result(ColorMixer::Result &constrait, vector<int> &max_frac_cnt) {
+    tuple<vector<ImmediateInfo>, double> eval_one_result(ColorMixer::Result &constrait, vector<int> &max_frac_cnt, bool is_nealy_final_turn) {
         int comb_size = constrait.indices.size();
 
         vector<vector<ImmediateInfo>> infos;
@@ -583,8 +589,8 @@ class PolicyFractor {
             for(const auto &info : comb) {
                 sum_vol += info.vol;
             }
-            if(sum_vol > 1.0 - 1e-6) {
-                double cost = eval_cost(comb);
+            if(sum_vol >= 1.0 - 1e-6) {
+                double cost = eval_cost(comb, is_nealy_final_turn);
                 if(cost < best_cost) {
                     best_cost = cost;
                     best_info = comb;
@@ -679,7 +685,7 @@ class PolicyFractor {
             }
         }
         do {
-            auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt);
+            auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt, true);
             if(now_cost < best_cost) {
                 best_cost = now_cost;
                 best_info = now_info;
@@ -699,11 +705,11 @@ class PolicyFractor {
         double real_diff_time = MAX_TIME - elapsed_time;
         double obj_one_deliver_time = (MAX_TIME - start_time) / (double)input.H;
         double obj_time = start_time + obj_one_deliver_time * state.deliver_cnt;
-        if(elapsed_time < obj_time) {
-            now_search_num += 10;
-        } else {
-            now_search_num = max(MIN_SEARCH_NUM, now_search_num - 1);
-        }
+        // if(elapsed_time < obj_time) {
+        //     now_search_num += 10;
+        // } else {
+        //     now_search_num = max(MIN_SEARCH_NUM, now_search_num - 1);
+        // }
 
         double best_cost = 1e9;
         vector<ImmediateInfo> best_info;
@@ -723,7 +729,7 @@ class PolicyFractor {
                 }
             }
             do {
-                auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt);
+                auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt, false);
                 if(now_cost < best_cost) {
                     best_cost = now_cost;
                     best_info = now_info;
@@ -755,7 +761,7 @@ class PolicyFractor {
                     }
                 }
                 do {
-                    auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt);
+                    auto [now_info, now_cost] = this->eval_one_result(result, max_frac_cnt, true);
                     if(now_cost < best_cost) {
                         best_cost = now_cost;
                         best_info = now_info;
@@ -784,8 +790,16 @@ class PolicyFractor {
             upper_vols.push_back(color_group_manager.get_paint(k, state).vol);
         }
         double sum_vol = accumulate(ALL(upper_vols), 0.0);
-        if(sum_vol > 1.0) {
-            auto upper_vols_result = mixer.get_fract_result_with_upper_vols(state.deliver_cnt, upper_vols);
+        if(sum_vol >= 1.0 - 1e-6) {
+            return {best_cost, best_info};
+        }
+
+        for(int k : range(input.K + 1)) {
+            auto new_upper_vols = upper_vols;
+            if(k < input.K) {
+                new_upper_vols[k] = 1.0;
+            }
+            auto upper_vols_result = mixer.get_fract_result_with_upper_vols(state.deliver_cnt, new_upper_vols);
             int comb_size = (int)upper_vols_result.indices.size();
             int remain_turn = policy_item.limit_turn - state.turn - calc_pred_fractor_turn(comb_size);
             if(remain_turn >= 0) {
@@ -798,7 +812,6 @@ class PolicyFractor {
                 }
             }
         }
-
         return {best_cost, best_info};
     }
 
@@ -814,6 +827,7 @@ class PolicyFractor {
             total_board_vol += color_group_manager.get_paint(k, state).vol;
         }
         if(remain_vol >= total_board_vol + PARTITION_SWITCH_TURN) {
+            // if(state.add_cnt <= input.H - PARTITION_SWITCH_TURN) {
             // まだ余裕があるなら、通常ターン
             tie(best_cost, best_info) = this->ordinaly_turn(policy_item);
         } else {

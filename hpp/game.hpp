@@ -199,6 +199,7 @@ struct State {
     int add_cnt = 0;
     double error = 0.0;
     double discard = 0.0;
+    double deliver_gap_vols = 0.0;
     int deliver_cnt = 0;
     int discard_cnt = 0;
 
@@ -256,6 +257,7 @@ struct State {
         };
         Color col = this->paints[id].color;
         Color tgt = input.target[this->delivered.size()];
+        deliver_gap_vols += max(0.0, 1.0 - this->paints[id].vol); // 1.0g配達せずに済んだときのgapの総和を記録しておく
         this->error += eval_error(col, tgt);
         this->paints[id].vol = max(0.0, this->paints[id].vol - 1.0);
         this->delivered.emplace_back(col);
@@ -359,9 +361,10 @@ struct State {
     }
 
     void print_info() {
+        double gap = discard - deliver_gap_vols;
         auto [deliver_cost, err_cost, total_cost] = get_score();
-        cerr << boost::format("H: %4d | Turn: %5d/%5d | Add: %4d | Discard: %4d (%5d loss) | Score: %5d (add: %5d, err: %5d)") % deliver_cnt % turn % input.T %
-                    add_cnt % discard_cnt % int(discard * 1e4) % total_cost % deliver_cost % err_cost
+        cerr << boost::format("H: %4d | Turn: %5d/%5d | Add: %4d | Discard: %4d (%.3f loss) | Score: %5d (add: %5d, err: %5d)") % deliver_cnt % turn % input.T %
+                    add_cnt % discard_cnt % gap % total_cost % deliver_cost % err_cost
              << "\n";
     }
 };

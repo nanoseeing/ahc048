@@ -105,7 +105,9 @@ void solve() {
 
     State state;
     Output output;
-    if(input.T <= 64000) {
+
+    const int SWITCH_TURN = 11000;
+    if(input.T <= SWITCH_TURN) {
         tie(output, state) = solve_greedy(input);
     } else {
         tie(output, state) = solve_fractor(input, time_keeper);
@@ -113,13 +115,8 @@ void solve() {
 
     cerr << boost::format("K: %d, T:%d, D:%d") % input.K % input.T % input.D << "\n";
     cerr << boost::format("score: %d, elapsed: %f, turn: %d/%d") % get<2>(state.get_score()) % time_keeper.getElapsedTime() % state.turn % input.T << "\n";
-
-    // output
-    if(IS_DEBUG) {
-        cout << boost::format("%d %d") % get<2>(state.get_score()) % state.turn << "\n";
-    } else {
-        print_output(output);
-    }
+    cerr << boost::format("%d %d") % get<2>(state.get_score()) % state.turn << "\n";
+    print_output(output);
 }
 
 int main() {

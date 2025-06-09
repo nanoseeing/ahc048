@@ -16,9 +16,8 @@ std::mt19937 engine(42);
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
-// 単純体への射影関数
-Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd& v) {
-    const int n = v.size();
+Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd& v, double sum = 1.0 - 1e-6) {
+    int n = v.size();
     std::vector<double> u(n);
     for(int i = 0; i < n; ++i)
         u[i] = v[i];
@@ -32,14 +31,14 @@ Eigen::VectorXd ProjectOntoSimplex(const Eigen::VectorXd& v) {
     int rho = -1;
     double theta = 0;
     for(int j = 0; j < n; ++j) {
-        double t = (cumsum[j] - 1.0) / (j + 1);
+        double t = (cumsum[j] - sum) / (j + 1);
         if(u[j] - t > 0) {
             rho = j;
             theta = t;
         }
     }
     if(rho < 0) {
-        return Eigen::VectorXd::Constant(n, 1.0 / n);
+        return Eigen::VectorXd::Constant(n, sum / n);
     }
     Eigen::VectorXd w(n);
     for(int i = 0; i < n; ++i) {
@@ -109,7 +108,8 @@ class ColorMixer {
         Eigen::VectorXd x = solver.solve();
         double sum_w = x.sum();
 
-        // assert(abs(sum_w - 1.0) < 1e-6); // 合計1制約
+        double target_sum_vol = 1.0 - 1e-6; // 絵の具を取り出せるギリギリにしたい。
+        // assert(abs(sum_w - target_sum_vol) < 1e-6); // 合計1制約
         // for(int i = 0; i < input.K; ++i) {
         //     assert(x(i) >= 0.0);  // 非負制約
         //     assert(x(i) <= u(i)); // 上限制約
@@ -119,7 +119,7 @@ class ColorMixer {
         vector<double> weights;
         if(sum_w < 1e-6) {
             for(int i = 0; i < input.K; ++i) {
-                weights.push_back(1.0 / input.K);
+                weights.push_back(target_sum_vol / input.K);
                 result_indices.push_back(i);
             }
         } else {
@@ -130,12 +130,14 @@ class ColorMixer {
                 }
             }
         }
+
         double tmp_sum_w = accumulate(weights.begin(), weights.end(), 0.0);
         for(int i : range(weights.size())) {
-            weights[i] /= tmp_sum_w; // 正規化
+            weights[i] /= tmp_sum_w;      // 合計1に正規化
+            weights[i] *= target_sum_vol; // 合計1.0 - 1e-6にするための正規化
         }
         double sum_new_w = accumulate(weights.begin(), weights.end(), 0.0);
-        assert(abs(sum_new_w - 1.0) < 1e-6);
+        assert(abs(sum_new_w - target_sum_vol) < 1e-6);
 
         double true_err = calc_true_error(weights, result_indices, input.target[h]);
         return Result{true_err * 1e4, move(result_indices), move(weights)};
@@ -255,21 +257,22 @@ class ColorMixer {
         nnls_solver.setTolerance(tol);
         nnls_solver.setMaxIterations(iter);
 
+        double target_sum_vol = 1.0 - 1e-6; // 絵の具を取り出せるギリギリにしたい。
         Eigen::Vector4d t_ext;
         t_ext(0) = target[0];
         t_ext(1) = target[1];
         t_ext(2) = target[2];
-        t_ext(3) = 1.0; // 「和が１になる」項を擬似的に加える
+        t_ext(3) = target_sum_vol;
 
         Eigen::VectorXd x = nnls_solver.solve(t_ext);
-        x = ProjectOntoSimplex(x); // 射影して非負かつ合計が1にする
+        x = ProjectOntoSimplex(x, target_sum_vol); // 射影して非負かつ合計が1にする
 
         double sum_w = x.sum();
-        assert(abs(sum_w - 1.0) < 1e-6);
+        assert(abs(sum_w - target_sum_vol) < 1e-6);
 
         vector<double> weights;
         for(int i = 0; i < N; ++i) {
-            weights.push_back(x(i) / sum_w); // 射影すれば1になるはずだが念のため正規化しておく
+            weights.push_back(x(i)); // !射影すれば1.0-1e-6になるはずなので正規化しない
         }
 
         double true_err = calc_true_error(weights, indices, target);

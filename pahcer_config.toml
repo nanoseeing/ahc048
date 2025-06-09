@@ -41,7 +41,7 @@ program = "./a.out"
 args = []
 stdin = "./tools/in/{SEED04}.txt"
 stdout = "./tools/out/{SEED04}.txt"
-stderr = "./tools/err/{SEED04}.txt"
+stderr = "./tools/err3/{SEED04}.txt"
 measure_time = true
 
 # Run the visualizer to calculate the score

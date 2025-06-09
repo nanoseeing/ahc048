@@ -7,6 +7,7 @@
 
 class BVLS_BoxSum {
   public:
+    static constexpr double obj_sum = 1.0 - 1e-6; // 合計1制約の目標値
     using Matrix = Eigen::MatrixXd;
     using Vector = Eigen::VectorXd;
     using Index = Eigen::Index;
@@ -22,7 +23,7 @@ class BVLS_BoxSum {
         //            1: 下限 0 固定 (Z)
         //            2: 上限 u_i 固定 (U)
         // 初期: 全部自由にして、最後に projectToSum1 しても OK
-        v.setConstant(1.0 / n_);
+        v.setConstant(obj_sum / n_);
         projectSum1(v);
 
         bool changed = true;
@@ -57,7 +58,7 @@ class BVLS_BoxSum {
             double sumU = 0;
             for(Index i = 0; i < n_; ++i)
                 if(state[i] == 2) sumU += u_[i];
-            rhs[p] = 1.0 - sumU;
+            rhs[p] = obj_sum - sumU;
 
             // KKT 系を解く
             Eigen::VectorXd sol = H.fullPivLu().solve(rhs);
@@ -99,6 +100,9 @@ class BVLS_BoxSum {
     /// 単に合計１になるよう自由変数をシフト／スケーリング
     void projectSum1(Vector& v) {
         double s = v.sum();
-        if(s > 0) v /= s;
+        if(s > 0) {
+            v /= s;
+            v *= obj_sum; // 合計1.0 - 1e-6にする
+        }
     }
 };
